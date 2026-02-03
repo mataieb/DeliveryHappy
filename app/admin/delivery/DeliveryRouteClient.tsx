@@ -1,3 +1,5 @@
+'use client';
+
 import { useState } from 'react';
 import { Select, Button, Card, Stack, Text, Group, Badge, Divider, Alert, Paper } from '@mantine/core';
 import { IconRoute, IconMapPin, IconHome, IconTruck, IconCheck, IconChefHat, IconPlayerPlay } from '@tabler/icons-react';
@@ -70,9 +72,11 @@ function calculateOptimalRoute(addresses: string[], homeAddress: string = "Votre
 }
 
 export function DeliveryRouteClient({ menuOptions, weekMenus }: DeliveryRouteClientProps) {
-    const [selectedMenuId, setSelectedMenuId] = useState<string | null>(
-        menuOptions.length > 0 ? menuOptions[0].value : null
-    );
+    // Find today's menu or default to first menu
+    const todayMenu = weekMenus.find(m => dayjs(m.date).isSame(dayjs(), 'day'));
+    const defaultMenuId = todayMenu?.id || (menuOptions.length > 0 ? menuOptions[0].value : null);
+
+    const [selectedMenuId, setSelectedMenuId] = useState<string | null>(defaultMenuId);
     const [optimizedRoute, setOptimizedRoute] = useState<string[] | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -161,6 +165,35 @@ export function DeliveryRouteClient({ menuOptions, weekMenus }: DeliveryRouteCli
                                     {selectedMenu.orders.length} livraison(s)
                                 </Badge>
                             </Group>
+
+                            <Divider label="Actions rapides" labelPosition="center" />
+
+                            <Group grow>
+                                <Button
+                                    leftSection={<IconChefHat size={18} />}
+                                    onClick={handleMarkAsKitchen}
+                                    size="sm"
+                                    variant="light"
+                                    color="orange"
+                                    loading={loading}
+                                    disabled={selectedMenu.orders.length === 0}
+                                >
+                                    Passer en cuisine
+                                </Button>
+                                <Button
+                                    leftSection={<IconPlayerPlay size={18} />}
+                                    onClick={handleStartDelivery}
+                                    size="sm"
+                                    variant="gradient"
+                                    gradient={{ from: 'cyan', to: 'blue' }}
+                                    loading={loading}
+                                    disabled={selectedMenu.orders.length === 0}
+                                >
+                                    Démarrer les livraisons
+                                </Button>
+                            </Group>
+
+                            <Divider />
 
                             <Button
                                 leftSection={<IconRoute size={18} />}

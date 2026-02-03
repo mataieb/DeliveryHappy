@@ -104,12 +104,103 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                         .map(([date, dateOrders]) => (
                             <Accordion.Item key={date} value={date}>
                                 <Accordion.Control>
-                                    <Group justify="space-between">
-                                        <Text fw={600}>
-                                            {dayjs(date).format('dddd DD MMMM YYYY')}
-                                        </Text>
-                                        <Badge color="blue">{dateOrders.length} commande(s)</Badge>
-                                    </Group>
+                                    <div>
+                                        <Group justify="space-between" mb="xs">
+                                            <Text fw={600}>
+                                                {dayjs(date).format('dddd DD MMMM YYYY')}
+                                            </Text>
+                                            <Group gap="xs">
+                                                <Badge color="blue">{dateOrders.length} commande(s)</Badge>
+                                                <Badge color="green">
+                                                    {dateOrders.reduce((sum, o) => sum + o.total, 0).toFixed(2)} €
+                                                </Badge>
+                                            </Group>
+                                        </Group>
+                                        <Group gap="xs">
+                                            <Text size="xs" c="dimmed">
+                                                📦 {dateOrders.reduce((sum, o) => sum + o.items.length, 0)} plat(s) total
+                                            </Text>
+                                            {(() => {
+                                                const itemCounts: Record<string, number> = {};
+                                                dateOrders.forEach(order => {
+                                                    order.items.forEach((item: any) => {
+                                                        const category = item.item.category;
+                                                        itemCounts[category] = (itemCounts[category] || 0) + 1;
+                                                    });
+                                                });
+                                                return (
+                                                    <>
+                                                        {itemCounts.STARTER > 0 && (
+                                                            <Badge size="xs" variant="dot" color="orange">
+                                                                {itemCounts.STARTER} entrée(s)
+                                                            </Badge>
+                                                        )}
+                                                        {itemCounts.MAIN > 0 && (
+                                                            <Badge size="xs" variant="dot" color="blue">
+                                                                {itemCounts.MAIN} plat(s)
+                                                            </Badge>
+                                                        )}
+                                                        {itemCounts.DESSERT > 0 && (
+                                                            <Badge size="xs" variant="dot" color="pink">
+                                                                {itemCounts.DESSERT} dessert(s)
+                                                            </Badge>
+                                                        )}
+                                                        {itemCounts.DRINK > 0 && (
+                                                            <Badge size="xs" variant="dot" color="cyan">
+                                                                {itemCounts.DRINK} boisson(s)
+                                                            </Badge>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </Group>
+                                        {/* Dietary Options Summary */}
+                                        {(() => {
+                                            const optionCounts: Record<string, number> = {};
+                                            dateOrders.forEach(order => {
+                                                order.items.forEach((item: any) => {
+                                                    if (item.selectedOption) {
+                                                        optionCounts[item.selectedOption] = (optionCounts[item.selectedOption] || 0) + 1;
+                                                    }
+                                                });
+                                            });
+
+                                            const hasOptions = Object.keys(optionCounts).length > 0;
+
+                                            if (!hasOptions) return null;
+
+                                            return (
+                                                <Group gap="xs" mt="xs">
+                                                    <Text size="xs" c="dimmed">🌿 Options :</Text>
+                                                    {optionCounts.VEGETARIAN > 0 && (
+                                                        <Badge size="xs" variant="light" color="green">
+                                                            {optionCounts.VEGETARIAN} Végétarien
+                                                        </Badge>
+                                                    )}
+                                                    {optionCounts.VEGAN > 0 && (
+                                                        <Badge size="xs" variant="light" color="teal">
+                                                            {optionCounts.VEGAN} Végan
+                                                        </Badge>
+                                                    )}
+                                                    {optionCounts.HALAL > 0 && (
+                                                        <Badge size="xs" variant="light" color="grape">
+                                                            {optionCounts.HALAL} Halal
+                                                        </Badge>
+                                                    )}
+                                                    {optionCounts.GLUTEN_FREE > 0 && (
+                                                        <Badge size="xs" variant="light" color="yellow">
+                                                            {optionCounts.GLUTEN_FREE} Sans Gluten
+                                                        </Badge>
+                                                    )}
+                                                    {optionCounts.SPICY > 0 && (
+                                                        <Badge size="xs" variant="light" color="red">
+                                                            {optionCounts.SPICY} Épicé
+                                                        </Badge>
+                                                    )}
+                                                </Group>
+                                            );
+                                        })()}
+                                    </div>
                                 </Accordion.Control>
                                 <Accordion.Panel>
                                     <Stack gap="md">

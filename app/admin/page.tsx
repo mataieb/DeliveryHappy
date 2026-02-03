@@ -71,17 +71,17 @@ export default async function AdminDashboard() {
     const dailyStats = weekMenus.map(menu => {
         const menuOrders = menu.orders;
         const itemsByCategory = {
-            ENTREE: 0,
-            PLAT: 0,
+            STARTER: 0,
+            MAIN: 0,
             DESSERT: 0,
-            BOISSON: 0
+            DRINK: 0
         };
 
         menuOrders.forEach(order => {
             order.items.forEach(orderItem => {
                 const category = orderItem.item.category;
                 if (category in itemsByCategory) {
-                    itemsByCategory[category]++;
+                    itemsByCategory[category as keyof typeof itemsByCategory]++;
                 }
             });
         });
@@ -168,14 +168,14 @@ export default async function AdminDashboard() {
                                             <IconSalad size={16} />
                                             <Text size="sm">Entrées</Text>
                                         </Group>
-                                        <Badge variant="light" color="orange">{dayStat.items.ENTREE}</Badge>
+                                        <Badge variant="light" color="orange">{dayStat.items.STARTER}</Badge>
                                     </Group>
                                     <Group justify="space-between">
                                         <Group gap="xs">
                                             <IconChefHat size={16} />
                                             <Text size="sm">Plats</Text>
                                         </Group>
-                                        <Badge variant="light" color="blue">{dayStat.items.PLAT}</Badge>
+                                        <Badge variant="light" color="blue">{dayStat.items.MAIN}</Badge>
                                     </Group>
                                     <Group justify="space-between">
                                         <Group gap="xs">
@@ -184,12 +184,12 @@ export default async function AdminDashboard() {
                                         </Group>
                                         <Badge variant="light" color="pink">{dayStat.items.DESSERT}</Badge>
                                     </Group>
-                                    {dayStat.items.BOISSON > 0 && (
+                                    {dayStat.items.DRINK > 0 && (
                                         <Group justify="space-between">
                                             <Group gap="xs">
                                                 <Text size="sm">🥤 Boissons</Text>
                                             </Group>
-                                            <Badge variant="light" color="cyan">{dayStat.items.BOISSON}</Badge>
+                                            <Badge variant="light" color="cyan">{dayStat.items.DRINK}</Badge>
                                         </Group>
                                     )}
                                 </Stack>
