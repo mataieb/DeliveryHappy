@@ -58,7 +58,7 @@ export default function MenuList({ menus }: MenuListProps) {
                         <Tabs.Panel key={menu.id} value={menu.id}>
                             <Group justify="flex-end" mb="md">
                                 <Button
-                                    component={isPast ? 'button' : Link}
+                                    component={isPast ? 'button' : (Link as any)}
                                     href={isPast ? undefined : `/order/${menu.id}`}
                                     size="md"
                                     variant="gradient"

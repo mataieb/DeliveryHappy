@@ -99,9 +99,9 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                 <Text c="dimmed" fs="italic">Aucune commande trouvée.</Text>
             ) : (
                 <Accordion variant="separated">
-                    {(Object.entries(groupedByDate) as [string, Order[]][])
+                    {(Object.entries(groupedByDate) as any[])
                         .sort(([a], [b]) => b.localeCompare(a))
-                        .map(([date, dateOrders]: [string, Order[]]) => (
+                        .map(([date, dateOrders]: [string, any[]]) => (
                             <Accordion.Item key={date} value={date}>
                                 <Accordion.Control>
                                     <div>
