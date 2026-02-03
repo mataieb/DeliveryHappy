@@ -101,7 +101,7 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                 <Accordion variant="separated">
                     {(Object.entries(groupedByDate) as [string, Order[]][])
                         .sort(([a], [b]) => b.localeCompare(a))
-                        .map(([date, dateOrders]) => (
+                        .map(([date, dateOrders]: [string, Order[]]) => (
                             <Accordion.Item key={date} value={date}>
                                 <Accordion.Control>
                                     <div>
