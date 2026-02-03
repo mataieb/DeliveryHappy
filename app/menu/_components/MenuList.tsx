@@ -1,7 +1,7 @@
 "use client";
 
 import { Menu, MenuItem, DietaryOption } from "@prisma/client";
-import { Tabs, SimpleGrid, Text, Group, Chip, Button } from "@mantine/core";
+import { Tabs, SimpleGrid, Text, Group, Button, Badge } from "@mantine/core";
 import Link from "next/link";
 import dayjs from "dayjs";
 import { useState } from "react";
@@ -13,7 +13,7 @@ interface MenuListProps {
 
 export default function MenuList({ menus }: MenuListProps) {
     if (!menus || menus.length === 0) {
-        return <Text>No menus available for the coming days.</Text>
+        return <Text>Aucun menu disponible pour cette semaine.</Text>
     }
 
     const [activeTab, setActiveTab] = useState<string | null>(menus[0].id);
@@ -26,41 +26,56 @@ export default function MenuList({ menus }: MenuListProps) {
         );
     };
 
+    const isPastDate = (date: Date) => {
+        return dayjs(date).isBefore(dayjs().startOf('day'));
+    };
+
     return (
         <>
-            <Group mb="lg">
-                <Text size="sm" fw={500}>Dietary Preferences:</Text>
-                <Chip.Group multiple value={selectedDietary} onChange={setSelectedDietary}>
-                    {Object.values(DietaryOption).map((option) => (
-                        <Chip key={String(option)} value={String(option)} variant="outline" size="sm" radius="sm">
-                            {(option as string).replace('_', ' ')}
-                        </Chip>
-                    ))}
-                </Chip.Group>
-            </Group>
-
             <Tabs value={activeTab} onChange={setActiveTab}>
                 <Tabs.List mb="lg">
-                    {menus.map((menu) => (
-                        <Tabs.Tab key={menu.id} value={menu.id}>
-                            {dayjs(menu.date).format("dddd, MMM D")}
-                        </Tabs.Tab>
-                    ))}
+                    {menus.map((menu) => {
+                        const isPast = isPastDate(menu.date);
+                        return (
+                            <Tabs.Tab
+                                key={menu.id}
+                                value={menu.id}
+                                color={isPast ? 'gray' : undefined}
+                                style={{ opacity: isPast ? 0.6 : 1 }}
+                            >
+                                {dayjs(menu.date).format("dddd, MMM D")}
+                                {isPast && <Badge size="xs" color="gray" ml="xs">Passé</Badge>}
+                            </Tabs.Tab>
+                        );
+                    })}
                 </Tabs.List>
 
                 {menus.map((menu) => {
                     const filteredItems = filterItems(menu.items);
+                    const isPast = isPastDate(menu.date);
+
                     return (
                         <Tabs.Panel key={menu.id} value={menu.id}>
                             <Group justify="flex-end" mb="md">
-                                <Button component={Link} href={`/order/${menu.id}`} size="md" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
-                                    Commander ce Menu
+                                <Button
+                                    component={isPast ? 'button' : Link}
+                                    href={isPast ? undefined : `/order/${menu.id}`}
+                                    size="md"
+                                    variant="gradient"
+                                    gradient={{ from: 'blue', to: 'cyan' }}
+                                    disabled={isPast}
+                                >
+                                    {isPast ? 'Menu expiré' : 'Commander ce Menu'}
                                 </Button>
                             </Group>
                             {filteredItems.length === 0 ? (
-                                <Text c="dimmed">No items match your dietary preferences for this day.</Text>
+                                <Text c="dimmed">Aucun plat disponible pour ce jour.</Text>
                             ) : (
-                                <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="lg">
+                                <SimpleGrid
+                                    cols={{ base: 1, sm: 2, md: 3 }}
+                                    spacing="lg"
+                                    style={{ opacity: isPast ? 0.5 : 1 }}
+                                >
                                     {filteredItems.map(item => (
                                         <MenuItemCard key={item.id} item={item} />
                                     ))}

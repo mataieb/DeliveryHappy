@@ -133,10 +133,12 @@ model Order {
 }
 
 enum OrderStatus {
-  PENDING
-  PAID
-  DELIVERED
-  CANCELLED
+  PENDING       // Prise en compte
+  IN_KITCHEN    // En cuisine (commandes du jour)
+  IN_DELIVERY   // En livraison
+  DELIVERED     // Livrée (en attente de paiement)
+  PAID          // Livrée et payée
+  CANCELLED     // Annulée
 }
 
 model OrderItem {

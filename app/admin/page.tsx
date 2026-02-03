@@ -1,22 +1,113 @@
-'use client';
+import { Container, Grid, GridCol, Paper, Text, Title, Group, ThemeIcon, Stack, Card, Badge, SimpleGrid, Divider } from '@mantine/core';
+import { IconCoin, IconReceipt, IconUsers, IconChefHat, IconSalad, IconCake } from '@tabler/icons-react';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { prisma } from '@/lib/prisma';
+import dayjs from 'dayjs';
 
-import { Container, Grid, Paper, Text, Title, Group, ThemeIcon } from '@mantine/core';
-import { IconCoin, IconReceipt, IconUsers } from '@tabler/icons-react';
+export const dynamic = 'force-dynamic';
 
-export default function AdminDashboard() {
+export default async function AdminDashboard() {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'ADMIN') {
+        redirect("/");
+    }
+
+    // Get total users
+    const totalUsers = await prisma.user.count();
+
+    // Get current week orders
+    const today = dayjs();
+    const startOfWeek = today.startOf('week').add(1, 'day').toDate();
+    const endOfWeek = today.endOf('week').add(1, 'day').toDate();
+
+    const weekOrders = await prisma.order.findMany({
+        where: {
+            createdAt: {
+                gte: startOfWeek,
+                lte: endOfWeek
+            }
+        },
+        include: {
+            menu: true,
+            items: {
+                include: {
+                    item: true
+                }
+            }
+        }
+    });
+
+    // Calculate total revenue
+    const totalRevenue = weekOrders.reduce((sum, order) => sum + order.total, 0);
+
+    // Get menus for the current week
+    const weekMenus = await prisma.menu.findMany({
+        where: {
+            date: {
+                gte: startOfWeek,
+                lte: endOfWeek
+            }
+        },
+        include: {
+            items: true,
+            orders: {
+                include: {
+                    items: {
+                        include: {
+                            item: true
+                        }
+                    }
+                }
+            }
+        },
+        orderBy: {
+            date: 'asc'
+        }
+    });
+
+    // Group orders by day and calculate item stats
+    const dailyStats = weekMenus.map(menu => {
+        const menuOrders = menu.orders;
+        const itemsByCategory = {
+            ENTREE: 0,
+            PLAT: 0,
+            DESSERT: 0,
+            BOISSON: 0
+        };
+
+        menuOrders.forEach(order => {
+            order.items.forEach(orderItem => {
+                const category = orderItem.item.category;
+                if (category in itemsByCategory) {
+                    itemsByCategory[category]++;
+                }
+            });
+        });
+
+        return {
+            date: menu.date,
+            orderCount: menuOrders.length,
+            revenue: menuOrders.reduce((sum, order) => sum + order.total, 0),
+            items: itemsByCategory
+        };
+    });
+
     const stats = [
-        { title: 'Commandes du jour', value: '12', icon: IconReceipt, color: 'blue' },
-        { title: 'Chiffre d\'affaire', value: '145.00€', icon: IconCoin, color: 'green' },
-        { title: 'Utilisateurs actifs', value: '25', icon: IconUsers, color: 'teal' },
+        { title: 'Utilisateurs inscrits', value: totalUsers.toString(), icon: IconUsers, color: 'teal' },
+        { title: 'Commandes cette semaine', value: weekOrders.length.toString(), icon: IconReceipt, color: 'blue' },
+        { title: 'CA de la semaine', value: `${totalRevenue.toFixed(2)}€`, icon: IconCoin, color: 'green' },
     ];
 
     return (
         <Container fluid>
             <Title order={2} mb="lg">Tableau de bord</Title>
 
-            <Grid>
+            {/* Stats globales */}
+            <Grid mb="xl">
                 {stats.map((stat) => (
-                    <Grid.Col key={stat.title} span={{ base: 12, sm: 6, md: 4 }}>
+                    <GridCol key={stat.title} span={{ base: 12, sm: 6, md: 4 }}>
                         <Paper withBorder p="md" radius="md">
                             <Group justify="space-between">
                                 <div>
@@ -37,9 +128,76 @@ export default function AdminDashboard() {
                                 </ThemeIcon>
                             </Group>
                         </Paper>
-                    </Grid.Col>
+                    </GridCol>
                 ))}
             </Grid>
+
+            {/* Détails par jour */}
+            <Title order={3} mb="md">Commandes par jour (Semaine en cours)</Title>
+            {dailyStats.length === 0 ? (
+                <Text c="dimmed">Aucun menu configuré pour cette semaine.</Text>
+            ) : (
+                <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
+                    {dailyStats.map((dayStat, index) => (
+                        <Card key={index} withBorder shadow="sm" radius="md" p="md">
+                            <Stack gap="xs">
+                                <Group justify="space-between">
+                                    <Text fw={600} size="lg">
+                                        {dayjs(dayStat.date).format('dddd DD/MM')}
+                                    </Text>
+                                    <Badge color={dayStat.orderCount > 0 ? 'blue' : 'gray'} size="lg">
+                                        {dayStat.orderCount} commande{dayStat.orderCount > 1 ? 's' : ''}
+                                    </Badge>
+                                </Group>
+
+                                <Divider />
+
+                                <Group justify="space-between">
+                                    <Text size="sm" c="dimmed">Chiffre d'affaire :</Text>
+                                    <Text size="sm" fw={600} c="green">
+                                        {dayStat.revenue.toFixed(2)} €
+                                    </Text>
+                                </Group>
+
+                                <Divider />
+
+                                <Text size="xs" fw={600} c="dimmed" tt="uppercase">Plats commandés :</Text>
+                                <Stack gap={4}>
+                                    <Group justify="space-between">
+                                        <Group gap="xs">
+                                            <IconSalad size={16} />
+                                            <Text size="sm">Entrées</Text>
+                                        </Group>
+                                        <Badge variant="light" color="orange">{dayStat.items.ENTREE}</Badge>
+                                    </Group>
+                                    <Group justify="space-between">
+                                        <Group gap="xs">
+                                            <IconChefHat size={16} />
+                                            <Text size="sm">Plats</Text>
+                                        </Group>
+                                        <Badge variant="light" color="blue">{dayStat.items.PLAT}</Badge>
+                                    </Group>
+                                    <Group justify="space-between">
+                                        <Group gap="xs">
+                                            <IconCake size={16} />
+                                            <Text size="sm">Desserts</Text>
+                                        </Group>
+                                        <Badge variant="light" color="pink">{dayStat.items.DESSERT}</Badge>
+                                    </Group>
+                                    {dayStat.items.BOISSON > 0 && (
+                                        <Group justify="space-between">
+                                            <Group gap="xs">
+                                                <Text size="sm">🥤 Boissons</Text>
+                                            </Group>
+                                            <Badge variant="light" color="cyan">{dayStat.items.BOISSON}</Badge>
+                                        </Group>
+                                    )}
+                                </Stack>
+                            </Stack>
+                        </Card>
+                    ))}
+                </SimpleGrid>
+            )}
         </Container>
     );
 }

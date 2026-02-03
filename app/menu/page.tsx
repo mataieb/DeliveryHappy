@@ -17,11 +17,16 @@ export default async function MenuPage() {
     //   redirect("/login");
     // }
 
-    const today = dayjs().startOf('day').toDate();
+    // Get start and end of current week (Monday to Sunday)
+    const today = dayjs();
+    const startOfWeek = today.startOf('week').add(1, 'day').toDate(); // Monday
+    const endOfWeek = today.endOf('week').add(1, 'day').toDate(); // Sunday
+
     const menus = await prisma.menu.findMany({
         where: {
             date: {
-                gte: today
+                gte: startOfWeek,
+                lte: endOfWeek
             }
         },
         include: {
@@ -29,23 +34,14 @@ export default async function MenuPage() {
         },
         orderBy: {
             date: 'asc'
-        },
-        take: 3
+        }
     });
 
     return (
         <Container size="lg" py="xl">
             <Group justify="space-between" mb="xl">
                 <Title>Lunch Menu</Title>
-                {session && (
-                    <Link href="/preferences" style={{ textDecoration: 'none' }}>
-                        <Button component="span" variant="light" size="xs">
-                            Mes Préférences
-                        </Button>
-                    </Link>
-                )}
             </Group>
-            {session && <Text mb="lg">Bonjour {session.user?.name || 'Gourmand'}</Text>}
             <MenuList menus={menus} />
         </Container>
     );
