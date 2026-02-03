@@ -23,8 +23,21 @@ model User {
   accounts      Account[]
   sessions      Session[]
   orders        Order[]
+  addresses     Address[]
+  dietaryPreferences DietaryOption[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  label     String   // e.g. "Home", "Office"
+  content   String   // e.g. "123 Main St, Apt 4B, Paris"
+  details   String?  // e.g. "Code 1234, Etage 2"
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Account {
@@ -110,6 +123,8 @@ model Order {
   items           OrderItem[]
   deliveryAddress String
   deliveryTime    String?
+  notes           String?
+  dietaryOption   String?
   status          OrderStatus @default(PENDING)
   stripePaymentId String?
   total           Float       @default(0)
@@ -130,4 +145,5 @@ model OrderItem {
   orderId   String
   item      MenuItem @relation(fields: [itemId], references: [id])
   itemId    String
+  selectedOption String?
 }

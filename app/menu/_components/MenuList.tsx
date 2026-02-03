@@ -1,12 +1,11 @@
 "use client";
 
 import { Menu, MenuItem, DietaryOption } from "@prisma/client";
-import { Tabs, Title, Text, Button, Stack, Card, Group, Radio, Badge, Textarea, Container, Alert } from "@mantine/core";
-import { useForm } from "@mantine/form";
+import { Tabs, SimpleGrid, Text, Group, Chip, Button } from "@mantine/core";
+import Link from "next/link";
 import dayjs from "dayjs";
-import 'dayjs/locale/fr';
-import { useState, useEffect } from "react";
-import { IconInfoCircle } from "@tabler/icons-react";
+import { useState } from "react";
+import MenuItemCard from "./MenuItemCard";
 
 interface MenuListProps {
     menus: (Menu & { items: MenuItem[] })[];
@@ -14,192 +13,63 @@ interface MenuListProps {
 
 export default function MenuList({ menus }: MenuListProps) {
     if (!menus || menus.length === 0) {
-        return <Text>Aucun menu disponible pour les prochains jours.</Text>
+        return <Text>No menus available for the coming days.</Text>
     }
 
-    // Default to first day
     const [activeTab, setActiveTab] = useState<string | null>(menus[0].id);
+    const [selectedDietary, setSelectedDietary] = useState<string[]>([]);
+
+    const filterItems = (items: MenuItem[]) => {
+        if (selectedDietary.length === 0) return items;
+        return items.filter(item =>
+            selectedDietary.every(tag => item.dietaryOptions?.includes(tag as DietaryOption))
+        );
+    };
 
     return (
-        <Container size="md">
-            <Tabs value={activeTab} onChange={setActiveTab} variant="outline" radius="md">
-                <Tabs.List mb="lg" justify="center">
+        <>
+            <Group mb="lg">
+                <Text size="sm" fw={500}>Dietary Preferences:</Text>
+                <Chip.Group multiple value={selectedDietary} onChange={setSelectedDietary}>
+                    {Object.values(DietaryOption).map((option) => (
+                        <Chip key={String(option)} value={String(option)} variant="outline" size="sm" radius="sm">
+                            {(option as string).replace('_', ' ')}
+                        </Chip>
+                    ))}
+                </Chip.Group>
+            </Group>
+
+            <Tabs value={activeTab} onChange={setActiveTab}>
+                <Tabs.List mb="lg">
                     {menus.map((menu) => (
-                        <Tabs.Tab key={menu.id} value={menu.id} px="xl" py="md">
-                            <Text fz="lg" fw={500}>{dayjs(menu.date).locale('fr').format("dddd D MMMM")}</Text>
+                        <Tabs.Tab key={menu.id} value={menu.id}>
+                            {dayjs(menu.date).format("dddd, MMM D")}
                         </Tabs.Tab>
                     ))}
                 </Tabs.List>
 
-                {menus.map((menu) => (
-                    <Tabs.Panel key={menu.id} value={menu.id}>
-                        <MenuOrderForm menu={menu} />
-                    </Tabs.Panel>
-                ))}
+                {menus.map((menu) => {
+                    const filteredItems = filterItems(menu.items);
+                    return (
+                        <Tabs.Panel key={menu.id} value={menu.id}>
+                            <Group justify="flex-end" mb="md">
+                                <Button component={Link} href={`/order/${menu.id}`} size="md" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>
+                                    Commander ce Menu
+                                </Button>
+                            </Group>
+                            {filteredItems.length === 0 ? (
+                                <Text c="dimmed">No items match your dietary preferences for this day.</Text>
+                            ) : (
+                                <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="lg">
+                                    {filteredItems.map(item => (
+                                        <MenuItemCard key={item.id} item={item} />
+                                    ))}
+                                </SimpleGrid>
+                            )}
+                        </Tabs.Panel>
+                    );
+                })}
             </Tabs>
-        </Container>
-    );
-}
-
-function MenuOrderForm({ menu }: { menu: Menu & { items: MenuItem[] } }) {
-    const mainDishes = menu.items.filter(i => i.category === 'MAIN');
-    const desserts = menu.items.filter(i => i.category === 'DESSERT');
-    // We could handle other categories if needed
-
-    const form = useForm({
-        initialValues: {
-            mainId: '',
-            dessertId: '', // Optional -> empty string means none
-            comments: {} as Record<string, string>, // itemId -> comment
-        },
-        validate: {
-            mainId: (value) => (value ? null : 'Veuillez choisir un plat principal'),
-        },
-    });
-
-    const handleSubmit = (values: typeof form.values) => {
-        console.log("Commande:", values);
-        alert("Commande validée (simulation) !");
-    };
-
-    return (
-        <form onSubmit={form.onSubmit(handleSubmit)}>
-            <Stack gap="xl">
-                {/* En-tête présentation simple */}
-                <BoxSection title="Menu du Jour" description="Faites votre choix parmi nos plats frais et faits maison qui changent tous les jours.">
-                    <Alert variant="light" color="blue" title="Info" icon={<IconInfoCircle />}>
-                        Commandez avant 11h pour être livré à midi.
-                    </Alert>
-                </BoxSection>
-
-                {/* Section PLATS */}
-                <BoxSection title="1. Choisissez votre plat principal *" description="Obligatoire">
-                    {mainDishes.length === 0 ? (
-                        <Text c="dimmed">Aucun plat disponible ce jour.</Text>
-                    ) : (
-                        <Radio.Group
-                            {...form.getInputProps('mainId')}
-                            withAsterisk
-                        >
-                            <Stack>
-                                {mainDishes.map(item => (
-                                    <SelectableItemCard
-                                        key={item.id}
-                                        item={item}
-                                        isSelected={form.values.mainId === item.id}
-                                        commentValue={form.values.comments[item.id] || ''}
-                                        onCommentChange={(val) => form.setFieldValue(`comments.${item.id}`, val)}
-                                    >
-                                        <Radio value={item.id} label={
-                                            <Text fw={500} size="lg">{item.name} - {item.price}€</Text>
-                                        } />
-                                    </SelectableItemCard>
-                                ))}
-                            </Stack>
-                        </Radio.Group>
-                    )}
-                    {form.errors.mainId && <Text c="red" size="sm" mt="xs">{form.errors.mainId}</Text>}
-                </BoxSection>
-
-                {/* Section DESSERTS */}
-                <BoxSection title="2. Une petite douceur ? (Optionnel)" description="Cochez si vous souhaitez un dessert">
-                    {desserts.length === 0 ? (
-                        <Text c="dimmed">Aucun dessert disponible ce jour.</Text>
-                    ) : (
-                        <Radio.Group
-                            value={form.values.dessertId}
-                            onChange={(val) => {
-                                // Allow toggling off if clicking same (handled via custom logic if standard radio doesn't support deselect)
-                                // Standard radio group doesn't deselect easily. let's add a "No dessert" or use custom.
-                                // User said "click to say they wish dessert".
-                                form.setFieldValue('dessertId', val);
-                            }}
-                        >
-                            <Stack>
-                                <Radio value="" label="Pas de dessert" mb="xs" />
-                                {desserts.map(item => (
-                                    <SelectableItemCard
-                                        key={item.id}
-                                        item={item}
-                                        isSelected={form.values.dessertId === item.id}
-                                        commentValue={form.values.comments[item.id] || ''}
-                                        onCommentChange={(val) => form.setFieldValue(`comments.${item.id}`, val)}
-                                    >
-                                        <Radio value={item.id} label={
-                                            <Text fw={500} size="lg">{item.name} - {item.price}€</Text>
-                                        } />
-                                    </SelectableItemCard>
-                                ))}
-                            </Stack>
-                        </Radio.Group>
-                    )}
-                </BoxSection>
-
-                <Button size="xl" type="submit" fullWidth mt="xl">
-                    Valider ma commande
-                </Button>
-            </Stack>
-        </form>
-    );
-}
-
-function BoxSection({ title, description, children }: { title: string, description?: string, children: React.ReactNode }) {
-    return (
-        <Stack gap="md">
-            <div>
-                <Title order={3}>{title}</Title>
-                {description && <Text c="dimmed">{description}</Text>}
-            </div>
-            {children}
-        </Stack>
-    );
-}
-
-function SelectableItemCard({ item, children, isSelected, commentValue, onCommentChange }: {
-    item: MenuItem,
-    children: React.ReactNode,
-    isSelected: boolean,
-    commentValue: string,
-    onCommentChange: (val: string) => void
-}) {
-    return (
-        <Card withBorder shadow={isSelected ? 'sm' : 'none'} padding="md" radius="md" style={{
-            borderColor: isSelected ? 'var(--mantine-color-blue-6)' : undefined,
-            backgroundColor: isSelected ? 'var(--mantine-color-blue-0)' : undefined
-        }}>
-            <Stack gap="xs">
-                <Group justify="space-between" align="flex-start">
-                    {children}
-                    {/* Badges for dietary */}
-                    <Group gap={5}>
-                        {item.dietaryOptions?.map((opt) => (
-                            <Badge key={opt} size="xs" variant="outline">{opt.substring(0, 3)}</Badge>
-                        ))}
-                    </Group>
-                </Group>
-
-                {item.description && <Text size="sm" c="dimmed" pl={28}>{item.description}</Text>}
-
-                {/* Ingredients Display */}
-                {item.ingredients && (
-                    <Text size="xs" c="dimmed" pl={28}>
-                        <Text span fw={500}>Ingrédients:</Text> {item.ingredients}
-                    </Text>
-                )}
-
-                {/* Comment Area - Only if selected */}
-                {isSelected && (
-                    <Textarea
-                        mt="sm"
-                        placeholder={`Précisions pour ${item.name} (ex: sans oignons, allergie...)`}
-                        label="Commentaire / Allergie"
-                        size="xs"
-                        autosize
-                        value={commentValue}
-                        onChange={(e) => onCommentChange(e.currentTarget.value)}
-                    />
-                )}
-            </Stack>
-        </Card>
+        </>
     );
 }
