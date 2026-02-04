@@ -1,6 +1,6 @@
 'use client';
 
-import { Container, Title, Text, Button, Checkbox, Group, Stack, Card, Radio, Divider, Badge, Alert, Textarea, Chip } from '@mantine/core';
+import { Container, Title, Text, Button, Checkbox, Group, Stack, Card, Radio, Divider, Badge, Alert, Textarea, Chip, NumberInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { createOrderAction } from '../actions';
@@ -13,7 +13,9 @@ import { IconAlertCircle } from '@tabler/icons-react';
 type Props = {
     menu: Menu & { items: MenuItem[] };
     addresses: Address[];
-};
+    containerBalance: number;
+}; // @ts-ignore
+
 
 const DIETARY_LABELS: Record<string, string> = {
     'VEGETARIAN': 'Végétarien',
@@ -23,7 +25,8 @@ const DIETARY_LABELS: Record<string, string> = {
     'SPICY': 'Épicé'
 };
 
-export default function OrderClient({ menu, addresses }: Props) {
+// @ts-ignore
+export default function OrderClient({ menu, addresses, containerBalance }: Props) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -32,6 +35,8 @@ export default function OrderClient({ menu, addresses }: Props) {
             selectedItems: [] as string[],
             itemOptions: {} as Record<string, string>,
             addressId: addresses.length > 0 ? addresses[0].id : '',
+            packaging: 'CARDBOARD' as 'CARDBOARD' | 'TUPPERWARE',
+            returnCount: containerBalance > 0 ? containerBalance : 0,
             notes: '',
         },
         validate: {
@@ -58,7 +63,8 @@ export default function OrderClient({ menu, addresses }: Props) {
             option: values.itemOptions[id]
         }));
 
-        const res = await createOrderAction(menu.id, items, fullAddress, values.notes, undefined);
+        // @ts-ignore
+        const res = await createOrderAction(menu.id, items, fullAddress, values.packaging, values.returnCount, values.notes, undefined);
 
         setLoading(false);
         if (res.success) {
@@ -140,7 +146,50 @@ export default function OrderClient({ menu, addresses }: Props) {
 
 
                     <Card withBorder radius="md">
-                        <Title order={4} mb="md">2. Adresse de livraison</Title>
+                        <Title order={4} mb="md">2. Emballage</Title>
+                        <Stack>
+                            <Radio.Group
+                                value={form.values.packaging}
+                                onChange={(val) => form.setFieldValue('packaging', val as any)}
+                                label="Choisissez votre contenant"
+                            >
+                                <Stack mt="xs">
+                                    <Radio value="CARDBOARD" label="Carton (Jetable/Recyclable)" />
+                                    <Radio value="TUPPERWARE" label="Tupperware (Consigne à rendre - Stock limité)" />
+                                </Stack>
+                            </Radio.Group>
+
+                            {(form.values.packaging === 'TUPPERWARE') && (
+                                <Alert icon={<IconAlertCircle size={16} />} color="blue" title="Fonctionnement Consigne">
+                                    En choisissant Tupperware, vous vous engagez à le restituer à la commande suivante.
+                                </Alert>
+                            )}
+
+                            <Divider />
+
+                            <Divider />
+
+                            <Text fw={500} size="sm" mb={4}>Retour de contenants</Text>
+                            {containerBalance > 0 ? (
+                                <Stack gap="xs">
+                                    <Text size="sm">Vous avez actuellement <b>{containerBalance}</b> Tupperware(s) en votre possession.</Text>
+                                    <NumberInput
+                                        label="Combien allez-vous en rendre à la livraison ?"
+                                        description="Le coursier les récupérera lors de la livraison."
+                                        min={0}
+                                        max={containerBalance}
+                                        value={form.values.returnCount}
+                                        onChange={(val) => form.setFieldValue('returnCount', Number(val))}
+                                    />
+                                </Stack>
+                            ) : (
+                                <Text size="sm" c="dimmed">Vous n'avez aucun contenant à rendre.</Text>
+                            )}
+                        </Stack>
+                    </Card>
+
+                    <Card withBorder radius="md">
+                        <Title order={4} mb="md">3. Adresse de livraison</Title>
 
                         {addresses.length === 0 ? (
                             <Alert icon={<IconAlertCircle size={16} />} title="Aucune adresse" color="yellow">

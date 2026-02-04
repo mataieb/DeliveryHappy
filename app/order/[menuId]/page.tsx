@@ -26,5 +26,39 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
 
     if (!user) redirect("/api/auth/signin");
 
-    return <OrderClient menu={menu} addresses={user.addresses} />;
+    // @ts-ignore
+    const currentBalance = user.containerBalance || 0;
+
+    // Calculate projected balance based on previous active orders
+    const activeOrders = await prisma.order.findMany({
+        where: {
+            userId: session.user.id,
+            status: { in: ['PENDING', 'IN_KITCHEN', 'IN_DELIVERY'] },
+            menu: {
+                date: { lt: menu.date }
+            }
+        },
+        // @ts-ignore
+        select: { status: true, packaging: true, isReturningContainer: true }
+    });
+
+    let projectedBalance = currentBalance;
+    for (const o of activeOrders) {
+        // Incoming Tupperware (Not yet added to balance)
+        // @ts-ignore
+        if (o.packaging === 'TUPPERWARE' && ['PENDING', 'IN_KITCHEN'].includes(o.status)) {
+            projectedBalance++;
+        }
+        // Outgoing Return (Not yet subtracted from balance)
+        // @ts-ignore
+        if (o.isReturningContainer) { // Valid for Pending, Kitchen, AND Delivery
+            projectedBalance--;
+        }
+    }
+
+    // Safety clamp (Balance shouldn't be negative physically, though math might allow it if data weird)
+    projectedBalance = Math.max(0, projectedBalance);
+
+    // @ts-ignore
+    return <OrderClient menu={menu} addresses={user.addresses} containerBalance={projectedBalance} />;
 }

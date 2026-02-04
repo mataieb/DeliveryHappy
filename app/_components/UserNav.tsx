@@ -4,7 +4,7 @@ import { Group, Button, Container } from "@mantine/core";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboard, IconUser, IconLogout, IconTruck } from "@tabler/icons-react";
+import { IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboard, IconUser, IconLogout, IconTruck, IconPackage } from "@tabler/icons-react";
 
 export function UserNav() {
     const pathname = usePathname();
@@ -39,6 +39,9 @@ export function UserNav() {
                             </Button>
                             <Button component={Link} href="/admin/delivery" variant={pathname?.startsWith('/admin/delivery') ? 'filled' : 'subtle'} leftSection={<IconTruck size={16} />}>
                                 Livraisons
+                            </Button>
+                            <Button component={Link} href="/admin/containers" variant={pathname?.startsWith('/admin/containers') ? 'filled' : 'subtle'} leftSection={<IconPackage size={16} />}>
+                                Contenants
                             </Button>
                         </Group>
 

@@ -25,6 +25,7 @@ model User {
   orders        Order[]
   addresses     Address[]
   dietaryPreferences DietaryOption[]
+  containerBalance Int       @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -128,6 +129,9 @@ model Order {
   status          OrderStatus @default(PENDING)
   stripePaymentId String?
   total           Float       @default(0)
+  packaging       Packaging   @default(CARDBOARD)
+  isReturningContainer Boolean @default(false)
+  containersReturnedCount Int @default(0)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 }
@@ -139,6 +143,11 @@ enum OrderStatus {
   DELIVERED     // Livrée (en attente de paiement)
   PAID          // Livrée et payée
   CANCELLED     // Annulée
+}
+
+enum Packaging {
+  CARDBOARD
+  TUPPERWARE
 }
 
 model OrderItem {

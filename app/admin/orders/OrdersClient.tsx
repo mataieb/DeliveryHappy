@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, Text, Badge, Group, Stack, Button, Divider, Grid, Select, Accordion } from "@mantine/core";
+import { Card, Text, Badge, Group, Stack, Button, Divider, Grid, Select, Accordion, Modal, NumberInput } from "@mantine/core";
 import { useState } from "react";
 import { notifications } from "@mantine/notifications";
 import dayjs from "dayjs";
@@ -37,16 +37,19 @@ const DIETARY_LABELS: Record<string, string> = {
 export function OrdersClient({ orders }: { orders: Order[] }) {
     const [filter, setFilter] = useState<string>('ALL');
     const [loading, setLoading] = useState<string | null>(null);
+    const [confirmModal, setConfirmModal] = useState({ opened: false, orderId: '', userName: '', returnedCount: 1 });
 
     const filteredOrders = orders.filter(order => {
         if (filter === 'ALL') return true;
         return order.status === filter;
     });
 
-    const handleStatusChange = async (orderId: string, newStatus: string) => {
+    // @ts-ignore
+    const handleStatusChange = async (orderId: string, newStatus: string, confirmedReturn = false) => {
         setLoading(orderId);
         try {
-            const res = await updateOrderStatusAction(orderId, newStatus);
+            // @ts-ignore
+            const res = await updateOrderStatusAction(orderId, newStatus, confirmedReturn);
             if (res.success) {
                 notifications.show({
                     title: 'Succès',
@@ -247,6 +250,21 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                                 {order.deliveryAddress}
                                                             </Text>
 
+                                                            <Divider my="xs" />
+                                                            <Group gap="xs">
+                                                                <Text size="sm" fw={500}>Emballage :</Text>
+                                                                {/* @ts-ignore */}
+                                                                {order.packaging === 'TUPPERWARE' ? (
+                                                                    <Badge color="blue" variant="filled">Tupperware</Badge>
+                                                                ) : (
+                                                                    <Badge color="gray" variant="outline">Carton</Badge>
+                                                                )}
+                                                                {/* @ts-ignore */}
+                                                                {order.isReturningContainer && (
+                                                                    <Badge color="orange" variant="light">Retourne un Tupperware</Badge>
+                                                                )}
+                                                            </Group>
+
                                                             {/* @ts-ignore */}
                                                             {order.notes && (
                                                                 <>
@@ -274,7 +292,19 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                                         variant={order.status === status ? 'filled' : 'light'}
                                                                         color={STATUS_COLORS[status]}
                                                                         size="xs"
-                                                                        onClick={() => handleStatusChange(order.id, status)}
+                                                                        onClick={() => {
+                                                                            if (status === 'DELIVERED' && order.status === 'IN_DELIVERY' && (order.isReturningContainer || (order.containersReturnedCount || 0) > 0)) {
+                                                                                setConfirmModal({
+                                                                                    opened: true,
+                                                                                    orderId: order.id,
+                                                                                    userName: order.user.name || order.user.email,
+                                                                                    // @ts-ignore
+                                                                                    returnedCount: order.containersReturnedCount || 1
+                                                                                });
+                                                                            } else {
+                                                                                handleStatusChange(order.id, status);
+                                                                            }
+                                                                        }}
                                                                         loading={loading === order.id}
                                                                         disabled={order.status === status}
                                                                     >
@@ -293,6 +323,36 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                         ))}
                 </Accordion>
             )}
+
+            <Modal
+                opened={confirmModal.opened}
+                onClose={() => setConfirmModal({ ...confirmModal, opened: false })}
+                title="Confirmation de retour Tupperware"
+                centered
+            >
+                <Text mb="md">
+                    L'utilisateur <b>{confirmModal.userName}</b> a prévu de rendre <b>{confirmModal.returnedCount}</b> Tupperware(s).
+                </Text>
+
+                <NumberInput
+                    label="Nombre de Tupperwares récupérés :"
+                    min={0}
+                    value={confirmModal.returnedCount}
+                    onChange={(val) => setConfirmModal({ ...confirmModal, returnedCount: Number(val) })}
+                    mb="xl"
+                />
+
+                <Group justify="flex-end">
+                    {/* @ts-ignore */}
+                    <Button variant="default" onClick={() => handleStatusChange(confirmModal.orderId, 'DELIVERED', 0).then(() => setConfirmModal({ ...confirmModal, opened: false }))}>
+                        Annuler / Pas rendu (0)
+                    </Button>
+                    {/* @ts-ignore */}
+                    <Button color="green" onClick={() => handleStatusChange(confirmModal.orderId, 'DELIVERED', confirmModal.returnedCount).then(() => setConfirmModal({ ...confirmModal, opened: false }))}>
+                        Confirmer (-{confirmModal.returnedCount})
+                    </Button>
+                </Group>
+            </Modal>
         </Stack>
     );
 }
