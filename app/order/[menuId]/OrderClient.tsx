@@ -10,12 +10,35 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { IconAlertCircle } from '@tabler/icons-react';
 
+// Extended types to match the deep fetch
+type OptionItem = {
+    id: string;
+    name: string;
+    description: string | null;
+    price: number;
+    groupId: string;
+};
+
+type OptionGroup = {
+    id: string;
+    name: string;
+    isRequired: boolean;
+    allowMultiple: boolean;
+    maxOptions: number | null;
+    menuItemId: string;
+    options: OptionItem[];
+};
+
+type MenuItemWithOptions = MenuItem & {
+    optionGroups: OptionGroup[];
+    spiceLevel?: string | null;
+};
+
 type Props = {
-    menu: Menu & { items: MenuItem[] };
+    menu: Menu & { items: MenuItemWithOptions[] };
     addresses: Address[];
     containerBalance: number;
 }; // @ts-ignore
-
 
 const DIETARY_LABELS: Record<string, string> = {
     'VEGETARIAN': 'Végétarien',
@@ -33,7 +56,8 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
     const form = useForm({
         initialValues: {
             selectedItems: [] as string[],
-            itemOptions: {} as Record<string, string>,
+            itemOptions: {} as Record<string, string>, // Legacy dietary options
+            complexOptions: {} as Record<string, Record<string, string | string[]>>, // { itemId: { groupId: val } }
             addressId: addresses.length > 0 ? addresses[0].id : '',
             packaging: 'CARDBOARD' as 'CARDBOARD' | 'TUPPERWARE',
             returnCount: containerBalance > 0 ? containerBalance : 0,
@@ -42,6 +66,7 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
         validate: {
             selectedItems: (val) => (val.length === 0 ? 'Veuillez choisir au moins un plat' : null),
             addressId: (val) => (val ? null : 'Veuillez choisir une adresse'),
+            // Optional: Add validation for required option groups
         },
     });
 
@@ -53,6 +78,22 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
             return;
         }
 
+        // Validate required groups
+        for (const itemId of values.selectedItems) {
+            const item = menu.items.find(i => i.id === itemId);
+            if (!item) continue;
+            for (const group of item.optionGroups) {
+                if (group.isRequired) {
+                    const selection = values.complexOptions[itemId]?.[group.id];
+                    if (!selection || (Array.isArray(selection) && selection.length === 0)) {
+                        notifications.show({ title: 'Attention', message: `Option requise pour ${item.name}: ${group.name}`, color: 'red' });
+                        setLoading(false);
+                        return;
+                    }
+                }
+            }
+        }
+
         // Format address for the order
         // @ts-ignore
         const fullAddress = `[${address.label}] ${address.content} ${address.details ? `\n(Complément: ${address.details})` : ''}`;
@@ -60,7 +101,8 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
         // Build items array with options
         const items = values.selectedItems.map(id => ({
             id,
-            option: values.itemOptions[id]
+            option: values.itemOptions[id],
+            selectedOptions: values.complexOptions[id]
         }));
 
         // @ts-ignore
@@ -75,9 +117,32 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
         }
     };
 
+    // Calculate Total
     const selectedTotal = menu.items
         .filter(item => form.values.selectedItems.includes(item.id))
-        .reduce((sum, item) => sum + item.price, 0);
+        .reduce((sum, item) => {
+            let itemTotal = item.price;
+
+            // Add options price
+            // Legacy options have no price in this logic (assuming included)
+
+            // Complex options
+            const itemSelections = form.values.complexOptions[item.id];
+            if (itemSelections) {
+                item.optionGroups.forEach(group => {
+                    const selection = itemSelections[group.id];
+                    if (selection) {
+                        const optionIds = Array.isArray(selection) ? selection : [selection];
+                        optionIds.forEach(optId => {
+                            const opt = group.options.find(o => o.id === optId);
+                            if (opt) itemTotal += opt.price;
+                        });
+                    }
+                });
+            }
+
+            return sum + itemTotal;
+        }, 0);
 
     return (
         <Container size="sm" py="xl">
@@ -97,33 +162,112 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
                                                 label={
                                                     <div>
                                                         <Text fw={500}>{item.name}</Text>
-                                                        {/* @ts-ignore */}
-                                                        {item.ingredients && <Text size="xs" c="dimmed">{item.ingredients}</Text>}
+                                                        <Group gap={4}>
+                                                            {/* @ts-ignore */}
+                                                            {item.ingredients && <Text size="xs" c="dimmed">{item.ingredients}</Text>}
+                                                            {/* @ts-ignore */}
+                                                            {(item.spiceLevel || item.dietaryOptions.includes('SPICY')) && (
+                                                                <Badge variant="outline" color="red" size="xs">
+                                                                    {item.spiceLevel === 'HOT' ? '🌶️🌶️🌶️ Très Épicé' :
+                                                                        item.spiceLevel === 'MEDIUM' ? '🌶️🌶️ Épicé' :
+                                                                            item.spiceLevel === 'MILD' ? '🌶️ Doux' :
+                                                                                '🌶️ Au choix'}
+                                                                </Badge>
+                                                            )}
+                                                        </Group>
                                                     </div>
                                                 }
                                             />
                                             <Text fw={600}>{item.price} €</Text>
                                         </div>
 
-                                        {/* Options diététiques par plat */}
-                                        {item.dietaryOptions && item.dietaryOptions.length > 0 && form.values.selectedItems.includes(item.id) && (
-                                            <div style={{ marginLeft: '32px', marginTop: '8px' }}>
-                                                <Text size="xs" fw={500} mb={4}>Options disponibles :</Text>
-                                                <Radio.Group
-                                                    value={form.values.itemOptions[item.id] || ''}
-                                                    onChange={(val) => form.setFieldValue(`itemOptions.${item.id}`, val)}
-                                                >
-                                                    <Group gap="xs">
-                                                        {item.dietaryOptions.map(opt => (
-                                                            <Radio
-                                                                key={opt}
-                                                                value={opt}
-                                                                label={DIETARY_LABELS[opt] || opt}
-                                                                size="xs"
-                                                            />
+                                        {/* Show Options ONLY if item is selected */}
+                                        {form.values.selectedItems.includes(item.id) && (
+                                            <div style={{ marginLeft: '32px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+                                                {/* Legacy Dietary Options - KEEPING FOR BACKWARD COMPATIBILITY but mostly superseded by Tags */}
+                                                {item.dietaryOptions && item.dietaryOptions.length > 0 && item.dietaryOptions.some(d => d !== 'SPICY') && (
+                                                    <Group gap="xs" mb="xs">
+                                                        {item.dietaryOptions.filter(d => d !== 'SPICY').map(opt => (
+                                                            <Badge key={opt} variant="dot" size="xs" color="gray">
+                                                                {DIETARY_LABELS[opt] || opt}
+                                                            </Badge>
                                                         ))}
                                                     </Group>
-                                                </Radio.Group>
+                                                )}
+
+                                                {/* New Complex Option Groups */}
+                                                {item.optionGroups.map(group => (
+                                                    <div key={group.id}>
+                                                        <Text size="sm" fw={500}>
+                                                            {group.name}
+                                                            {group.isRequired && <span style={{ color: 'red' }}> *</span>}
+                                                            {group.maxOptions && group.allowMultiple && <span style={{ fontSize: '0.8em', color: 'gray' }}> (Max {group.maxOptions})</span>}
+                                                        </Text>
+
+                                                        {group.allowMultiple ? (
+                                                            <Checkbox.Group
+                                                                value={form.values.complexOptions[item.id]?.[group.id] as string[] || []}
+                                                                onChange={(val) => {
+                                                                    if (group.maxOptions && val.length > group.maxOptions) return; // Prevent selection
+                                                                    const currentItemOptions = form.values.complexOptions[item.id] || {};
+                                                                    form.setFieldValue(`complexOptions.${item.id}`, { ...currentItemOptions, [group.id]: val });
+                                                                }}
+                                                            >
+                                                                <Stack gap="xs" mt="xs">
+                                                                    {group.options.map(opt => (
+                                                                        <Checkbox
+                                                                            key={opt.id}
+                                                                            value={opt.id}
+                                                                            label={
+                                                                                <div>
+                                                                                    <Text size="sm">{opt.name} {opt.price > 0 && <b>(+{opt.price}€)</b>}</Text>
+                                                                                    {opt.description && <Text size="xs" c="dimmed" fs="italic">{opt.description}</Text>}
+                                                                                </div>
+                                                                            }
+                                                                            size="sm"
+                                                                        />
+                                                                    ))}
+                                                                </Stack>
+                                                            </Checkbox.Group>
+                                                        ) : (
+                                                            // RADIO GROUP (Single Choice)
+                                                            <Radio.Group
+                                                                value={form.values.complexOptions[item.id]?.[group.id] as string || ''}
+                                                                onChange={(val) => {
+                                                                    const currentItemOptions = form.values.complexOptions[item.id] || {};
+                                                                    form.setFieldValue(`complexOptions.${item.id}`, { ...currentItemOptions, [group.id]: val });
+                                                                }}
+                                                            >
+                                                                <Stack gap="xs" mt="xs">
+                                                                    {group.options.map(opt => (
+                                                                        <Radio
+                                                                            key={opt.id}
+                                                                            value={opt.id}
+                                                                            label={
+                                                                                <div>
+                                                                                    <Text size="sm">{opt.name} {opt.price > 0 && <b>(+{opt.price}€)</b>}</Text>
+                                                                                    {opt.description && <Text size="xs" c="dimmed" fs="italic">{opt.description}</Text>}
+                                                                                </div>
+                                                                            }
+                                                                            size="sm"
+                                                                            onClick={() => {
+                                                                                const currentVal = form.values.complexOptions[item.id]?.[group.id];
+                                                                                if (!group.isRequired && currentVal === opt.id) {
+                                                                                    const currentItemOptions = form.values.complexOptions[item.id] || {};
+                                                                                    const newOptions = { ...currentItemOptions };
+                                                                                    delete newOptions[group.id];
+                                                                                    // setTimeout to avoid conflict with onChange if any
+                                                                                    setTimeout(() => form.setFieldValue(`complexOptions.${item.id}`, newOptions), 0);
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    ))}
+                                                                </Stack>
+                                                            </Radio.Group>
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                     </div>
@@ -226,8 +370,8 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
                     <Button size="lg" type="submit" loading={loading} disabled={addresses.length === 0}>
                         Valider la commande
                     </Button>
-                </Stack>
-            </form>
-        </Container>
+                </Stack >
+            </form >
+        </Container >
     )
 }

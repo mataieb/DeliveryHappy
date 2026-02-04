@@ -19,7 +19,15 @@ export default async function AdminOrdersPage() {
             user: true,
             menu: true,
             items: {
-                include: { item: true }
+                include: {
+                    item: {
+                        include: {
+                            optionGroups: {
+                                include: { options: true }
+                            }
+                        }
+                    }
+                }
             }
         }
     });

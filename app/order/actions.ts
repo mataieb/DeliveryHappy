@@ -5,7 +5,11 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-type OrderedItem = { id: string; option?: string };
+type OrderedItem = {
+    id: string;
+    option?: string;
+    selectedOptions?: Record<string, any>; // JSON structure
+};
 
 // @ts-ignore
 export async function createOrderAction(menuId: string, items: OrderedItem[], deliveryAddress: string, packaging: 'CARDBOARD' | 'TUPPERWARE', returnedCount: number, notes?: string, dietaryOption?: string) {
@@ -56,13 +60,43 @@ export async function createOrderAction(menuId: string, items: OrderedItem[], de
             }
         }
 
-        // Calculate total
+        // Calculate total with Options
         const itemIds = items.map(i => i.id);
         const dbItems = await prisma.menuItem.findMany({
-            where: { id: { in: itemIds } }
+            where: { id: { in: itemIds } },
+            include: {
+                optionGroups: {
+                    include: { options: true }
+                }
+            }
         });
 
-        const total = dbItems.reduce((sum, item) => sum + item.price, 0);
+        let total = 0;
+
+        for (const item of items) {
+            const dbItem = dbItems.find(i => i.id === item.id);
+            if (!dbItem) continue; // Should not happen
+
+            let itemPrice = dbItem.price;
+
+            // Calculate Options Price
+            if (item.selectedOptions) {
+                for (const [groupId, selection] of Object.entries(item.selectedOptions)) {
+                    const group = dbItem.optionGroups.find(g => g.id === groupId);
+                    if (!group) continue;
+
+                    const optionIds = Array.isArray(selection) ? selection : [selection];
+
+                    for (const optId of optionIds) {
+                        const opt = group.options.find(o => o.id === optId);
+                        if (opt) {
+                            itemPrice += opt.price;
+                        }
+                    }
+                }
+            }
+            total += itemPrice;
+        }
 
         await prisma.order.create({
             data: {
@@ -79,7 +113,8 @@ export async function createOrderAction(menuId: string, items: OrderedItem[], de
                 items: {
                     create: items.map(i => ({
                         itemId: i.id,
-                        selectedOption: i.option
+                        selectedOption: i.option,
+                        selectedOptions: i.selectedOptions ?? undefined
                     }))
                 }
             }

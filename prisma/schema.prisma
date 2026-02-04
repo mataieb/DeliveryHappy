@@ -95,9 +95,31 @@ model MenuItem {
   category    ItemCategory @default(MAIN)
   price       Float       @default(0)
   dietaryOptions DietaryOption[]
+  spiceLevel  String?     // 'MILD', 'MEDIUM', 'HOT'
   menu        Menu        @relation(fields: [menuId], references: [id], onDelete: Cascade)
   menuId      String
-  orderItems  OrderItem[]
+  optionGroups OptionGroup[]
+  orderItems   OrderItem[]
+}
+
+model OptionGroup {
+  id          String       @id @default(cuid())
+  name        String
+  isRequired  Boolean      @default(false)
+  allowMultiple Boolean    @default(false)
+  maxOptions  Int?
+  menuItem    MenuItem     @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  menuItemId  String
+  options     OptionItem[]
+}
+
+model OptionItem {
+  id        String      @id @default(cuid())
+  name      String
+  description String?
+  price     Float       @default(0)
+  group     OptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
 }
 
 enum ItemCategory {
@@ -156,5 +178,6 @@ model OrderItem {
   orderId   String
   item      MenuItem @relation(fields: [itemId], references: [id])
   itemId    String
-  selectedOption String?
+  selectedOption String? // Deprecated or simple Note?
+  selectedOptions Json?   // Stores complex selections { [groupId]: [optionId, optionId] }
 }

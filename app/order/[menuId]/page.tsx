@@ -14,7 +14,17 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
 
     const menu = await prisma.menu.findUnique({
         where: { id: menuId },
-        include: { items: true },
+        include: {
+            items: {
+                include: {
+                    optionGroups: {
+                        include: {
+                            options: true
+                        }
+                    }
+                }
+            }
+        },
     });
 
     if (!menu) notFound();

@@ -124,85 +124,100 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                 📦 {dateOrders.reduce((sum, o) => sum + o.items.length, 0)} plat(s) total
                                             </Text>
                                             {(() => {
+                                                // Calculate stats
                                                 const itemCounts: Record<string, number> = {};
+                                                const optionCounts: Record<string, number> = {};
+                                                let packagingStats = { CARDBOARD: 0, TUPPERWARE: 0, RETURNS: 0 };
+
                                                 dateOrders.forEach(order => {
+                                                    // Packaging
+                                                    if (order.packaging === 'CARDBOARD') packagingStats.CARDBOARD++;
+                                                    if (order.packaging === 'TUPPERWARE') packagingStats.TUPPERWARE++;
+                                                    if (order.isReturningContainer) packagingStats.RETURNS += (order.containersReturnedCount || 0);
+
                                                     order.items.forEach((item: any) => {
                                                         const category = item.item.category;
                                                         itemCounts[category] = (itemCounts[category] || 0) + 1;
+
+                                                        // Legacy options
+                                                        if (item.selectedOption) {
+                                                            optionCounts[item.selectedOption] = (optionCounts[item.selectedOption] || 0) + 1;
+                                                        }
+
+                                                        // New Complex Options
+                                                        if (item.selectedOptions && item.item.optionGroups) {
+                                                            Object.entries(item.selectedOptions).forEach(([groupId, selection]) => {
+                                                                const group = item.item.optionGroups.find((g: any) => g.id === groupId);
+                                                                if (group) {
+                                                                    // Infer type from group name (robust enough for now)
+                                                                    if (group.name.includes("Protéines")) optionCounts['PROTEIN'] = (optionCounts['PROTEIN'] || 0) + 1;
+                                                                    if (group.name.includes("Sans Gluten")) optionCounts['GLUTEN_FREE'] = (optionCounts['GLUTEN_FREE'] || 0) + 1;
+                                                                    if (group.name.includes("Variantes")) {
+                                                                        // We might want to know WHICH variant
+                                                                        const ids = Array.isArray(selection) ? selection : [selection];
+                                                                        ids.forEach((id: string) => {
+                                                                            const opt = group.options.find((o: any) => o.id === id);
+                                                                            if (opt) {
+                                                                                if (opt.name.includes("Végé")) optionCounts['VEGETARIAN'] = (optionCounts['VEGETARIAN'] || 0) + 1;
+                                                                                if (opt.name.includes("Végan")) optionCounts['VEGAN'] = (optionCounts['VEGAN'] || 0) + 1;
+                                                                                if (opt.name.includes("Halal")) optionCounts['HALAL'] = (optionCounts['HALAL'] || 0) + 1;
+                                                                                if (opt.name.includes("Sans Gluten")) optionCounts['GLUTEN_FREE'] = (optionCounts['GLUTEN_FREE'] || 0) + 1;
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                    if (group.name.includes("épice")) optionCounts['SPICY'] = (optionCounts['SPICY'] || 0) + 1;
+                                                                }
+                                                            });
+                                                        }
                                                     });
                                                 });
+
                                                 return (
-                                                    <>
-                                                        {itemCounts.STARTER > 0 && (
-                                                            <Badge size="xs" variant="dot" color="orange">
-                                                                {itemCounts.STARTER} entrée(s)
-                                                            </Badge>
+                                                    <Stack gap={4}>
+                                                        <Group gap="xs">
+                                                            {itemCounts.STARTER > 0 && (
+                                                                <Badge size="xs" variant="dot" color="orange">
+                                                                    {itemCounts.STARTER} entrée(s)
+                                                                </Badge>
+                                                            )}
+                                                            {itemCounts.MAIN > 0 && (
+                                                                <Badge size="xs" variant="dot" color="blue">
+                                                                    {itemCounts.MAIN} plat(s)
+                                                                </Badge>
+                                                            )}
+                                                            {itemCounts.DESSERT > 0 && (
+                                                                <Badge size="xs" variant="dot" color="pink">
+                                                                    {itemCounts.DESSERT} dessert(s)
+                                                                </Badge>
+                                                            )}
+                                                            {itemCounts.DRINK > 0 && (
+                                                                <Badge size="xs" variant="dot" color="cyan">
+                                                                    {itemCounts.DRINK} boisson(s)
+                                                                </Badge>
+                                                            )}
+                                                        </Group>
+
+                                                        <Group gap="xs">
+                                                            <Text size="xs" c="dimmed">📦 {packagingStats.CARDBOARD} Cartons</Text>
+                                                            <Text size="xs" c="dimmed">🍱 {packagingStats.TUPPERWARE} Tupperwares</Text>
+                                                            {packagingStats.RETURNS > 0 && <Text size="xs" c="orange">↩️ {packagingStats.RETURNS} retours</Text>}
+                                                        </Group>
+
+                                                        {Object.keys(optionCounts).length > 0 && (
+                                                            <Group gap="xs">
+                                                                <Text size="xs" c="dimmed">🌿 Options plat :</Text>
+                                                                {optionCounts.VEGETARIAN > 0 && <Badge size="xs" variant="light" color="green">{optionCounts.VEGETARIAN} Végétarien</Badge>}
+                                                                {optionCounts.VEGAN > 0 && <Badge size="xs" variant="light" color="teal">{optionCounts.VEGAN} Végan</Badge>}
+                                                                {optionCounts.HALAL > 0 && <Badge size="xs" variant="light" color="grape">{optionCounts.HALAL} Halal</Badge>}
+                                                                {optionCounts.GLUTEN_FREE > 0 && <Badge size="xs" variant="light" color="yellow">{optionCounts.GLUTEN_FREE} Sans Gluten</Badge>}
+                                                                {optionCounts.PROTEIN > 0 && <Badge size="xs" variant="light" color="blue">{optionCounts.PROTEIN} Protéines</Badge>}
+                                                                {optionCounts.SPICY > 0 && <Badge size="xs" variant="light" color="red">{optionCounts.SPICY} Épicé</Badge>}
+                                                            </Group>
                                                         )}
-                                                        {itemCounts.MAIN > 0 && (
-                                                            <Badge size="xs" variant="dot" color="blue">
-                                                                {itemCounts.MAIN} plat(s)
-                                                            </Badge>
-                                                        )}
-                                                        {itemCounts.DESSERT > 0 && (
-                                                            <Badge size="xs" variant="dot" color="pink">
-                                                                {itemCounts.DESSERT} dessert(s)
-                                                            </Badge>
-                                                        )}
-                                                        {itemCounts.DRINK > 0 && (
-                                                            <Badge size="xs" variant="dot" color="cyan">
-                                                                {itemCounts.DRINK} boisson(s)
-                                                            </Badge>
-                                                        )}
-                                                    </>
+                                                    </Stack>
                                                 );
                                             })()}
                                         </Group>
-                                        {/* Dietary Options Summary */}
-                                        {(() => {
-                                            const optionCounts: Record<string, number> = {};
-                                            dateOrders.forEach(order => {
-                                                order.items.forEach((item: any) => {
-                                                    if (item.selectedOption) {
-                                                        optionCounts[item.selectedOption] = (optionCounts[item.selectedOption] || 0) + 1;
-                                                    }
-                                                });
-                                            });
-
-                                            const hasOptions = Object.keys(optionCounts).length > 0;
-
-                                            if (!hasOptions) return null;
-
-                                            return (
-                                                <Group gap="xs" mt="xs">
-                                                    <Text size="xs" c="dimmed">🌿 Options :</Text>
-                                                    {optionCounts.VEGETARIAN > 0 && (
-                                                        <Badge size="xs" variant="light" color="green">
-                                                            {optionCounts.VEGETARIAN} Végétarien
-                                                        </Badge>
-                                                    )}
-                                                    {optionCounts.VEGAN > 0 && (
-                                                        <Badge size="xs" variant="light" color="teal">
-                                                            {optionCounts.VEGAN} Végan
-                                                        </Badge>
-                                                    )}
-                                                    {optionCounts.HALAL > 0 && (
-                                                        <Badge size="xs" variant="light" color="grape">
-                                                            {optionCounts.HALAL} Halal
-                                                        </Badge>
-                                                    )}
-                                                    {optionCounts.GLUTEN_FREE > 0 && (
-                                                        <Badge size="xs" variant="light" color="yellow">
-                                                            {optionCounts.GLUTEN_FREE} Sans Gluten
-                                                        </Badge>
-                                                    )}
-                                                    {optionCounts.SPICY > 0 && (
-                                                        <Badge size="xs" variant="light" color="red">
-                                                            {optionCounts.SPICY} Épicé
-                                                        </Badge>
-                                                    )}
-                                                </Group>
-                                            );
-                                        })()}
                                     </div>
                                 </Accordion.Control>
                                 <Accordion.Panel>
@@ -238,6 +253,36 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                                                 ({DIETARY_LABELS[orderItem.selectedOption] || orderItem.selectedOption})
                                                                             </Text>
                                                                         )}
+
+                                                                        {/* Complex Options Display */}
+                                                                        {/* @ts-ignore */}
+                                                                        {orderItem.selectedOptions && orderItem.item.optionGroups && (
+                                                                            <Stack gap={0} ml="md">
+                                                                                {/* @ts-ignore */}
+                                                                                {Object.entries(orderItem.selectedOptions).map(([groupId, selection]) => {
+                                                                                    // @ts-ignore
+                                                                                    const group = orderItem.item.optionGroups.find(g => g.id === groupId);
+                                                                                    if (!group) return null;
+
+                                                                                    const ids = Array.isArray(selection) ? selection : [selection];
+                                                                                    // @ts-ignore
+                                                                                    const names = ids.map(id => {
+                                                                                        // @ts-ignore
+                                                                                        const opt = group.options.find(o => o.id === id);
+                                                                                        return opt ? opt.name : null;
+                                                                                    }).filter(Boolean).join(', ');
+
+                                                                                    if (!names) return null;
+
+                                                                                    return (
+                                                                                        <Text key={groupId} size="xs" c="dimmed">
+                                                                                            + {group.name}: {names}
+                                                                                        </Text>
+                                                                                    );
+                                                                                })}
+                                                                            </Stack>
+                                                                        )}
+
                                                                         <Text size="sm" c="dimmed">- {orderItem.item.price} €</Text>
                                                                     </Group>
                                                                 ))}

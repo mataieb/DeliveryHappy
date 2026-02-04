@@ -4,6 +4,22 @@ import { prisma } from '@/lib/prisma';
 import { ItemCategory, DietaryOption } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 
+export type OptionItemInput = {
+    id?: string;
+    name: string;
+    description?: string;
+    price: number;
+};
+
+export type OptionGroupInput = {
+    id?: string;
+    name: string;
+    isRequired: boolean;
+    allowMultiple: boolean;
+    maxOptions?: number;
+    options: OptionItemInput[];
+};
+
 export type MenuItemInput = {
     id?: string;
     name: string;
@@ -12,18 +28,15 @@ export type MenuItemInput = {
     price: number;
     category: ItemCategory;
     dietaryOptions: DietaryOption[];
+    spiceLevel?: string;
+    optionGroups: OptionGroupInput[];
 };
 
 export async function createMenuAction(date: Date, items: MenuItemInput[]) {
     try {
-        // Check if menu exists for this date (ignoring time for simplicity, but usually date is stored as midnight UTC)
-        // To be safe, let's normalize the date to start of day if not already.
-        // However, Prisma DateTime is specific. Let's assume the client sends a clean date or we normalize it here.
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
 
-        // We might want to clear previous entries if we are 'replacing' or just fail.
-        // For now, fail if exists.
         const count = await prisma.menu.count({
             where: {
                 date: startOfDay,
@@ -38,7 +51,30 @@ export async function createMenuAction(date: Date, items: MenuItemInput[]) {
             data: {
                 date: startOfDay,
                 items: {
-                    create: items,
+                    create: items.map(item => ({
+                        name: item.name,
+                        description: item.description,
+                        ingredients: item.ingredients,
+                        price: item.price,
+                        category: item.category,
+                        dietaryOptions: item.dietaryOptions,
+                        spiceLevel: item.spiceLevel,
+                        optionGroups: {
+                            create: item.optionGroups.map(group => ({
+                                name: group.name,
+                                isRequired: group.isRequired,
+                                allowMultiple: group.allowMultiple,
+                                maxOptions: group.maxOptions,
+                                options: {
+                                    create: group.options.map(opt => ({
+                                        name: opt.name,
+                                        description: opt.description,
+                                        price: opt.price
+                                    }))
+                                }
+                            }))
+                        }
+                    })),
                 },
             },
         });
@@ -76,12 +112,6 @@ export async function updateMenuAction(id: string, date: Date, items: MenuItemIn
         });
 
         // 2. Handle Items
-        // Strategy:
-        // - Items with ID: Update
-        // - Items without ID: Create
-        // - Items in DB not in list: Delete (if not ordered)
-
-        // Get existing items to know what to delete
         const existingItems = await prisma.menuItem.findMany({
             where: { menuId: id },
             select: { id: true },
@@ -101,6 +131,11 @@ export async function updateMenuAction(id: string, date: Date, items: MenuItemIn
         for (const item of items) {
             if (item.id) {
                 // Update
+                // Wipe existing option groups to replace them (simplest strategy)
+                await prisma.optionGroup.deleteMany({
+                    where: { menuItemId: item.id }
+                });
+
                 await prisma.menuItem.update({
                     where: { id: item.id },
                     data: {
@@ -110,6 +145,22 @@ export async function updateMenuAction(id: string, date: Date, items: MenuItemIn
                         price: item.price,
                         category: item.category,
                         dietaryOptions: item.dietaryOptions,
+                        spiceLevel: item.spiceLevel,
+                        optionGroups: {
+                            create: item.optionGroups.map(group => ({
+                                name: group.name,
+                                isRequired: group.isRequired,
+                                allowMultiple: group.allowMultiple,
+                                maxOptions: group.maxOptions,
+                                options: {
+                                    create: group.options.map(opt => ({
+                                        name: opt.name,
+                                        description: opt.description,
+                                        price: opt.price
+                                    }))
+                                }
+                            }))
+                        }
                     },
                 });
             } else {
@@ -123,6 +174,22 @@ export async function updateMenuAction(id: string, date: Date, items: MenuItemIn
                         price: item.price,
                         category: item.category,
                         dietaryOptions: item.dietaryOptions,
+                        spiceLevel: item.spiceLevel,
+                        optionGroups: {
+                            create: item.optionGroups.map(group => ({
+                                name: group.name,
+                                isRequired: group.isRequired,
+                                allowMultiple: group.allowMultiple,
+                                maxOptions: group.maxOptions,
+                                options: {
+                                    create: group.options.map(opt => ({
+                                        name: opt.name,
+                                        description: opt.description,
+                                        price: opt.price
+                                    }))
+                                }
+                            }))
+                        }
                     },
                 });
             }

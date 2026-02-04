@@ -17,7 +17,15 @@ export default async function OrderHistoryPage() {
         include: {
             menu: true,
             items: {
-                include: { item: true }
+                include: {
+                    item: {
+                        include: {
+                            optionGroups: {
+                                include: { options: true }
+                            }
+                        }
+                    }
+                }
             }
         }
     });
@@ -42,26 +50,81 @@ export default async function OrderHistoryPage() {
                                 <Text fw={700} c="blue">{order.total.toFixed(2)} €</Text>
                             </Group>
 
-                            <Text size="sm" c="dimmed" mb="md">
-                                Livraison à : {order.deliveryAddress}
-                            </Text>
+                            <Group gap="xs" mb="md">
+                                <Text size="sm" c="dimmed">Livraison à : {order.deliveryAddress}</Text>
+                                <Badge variant="outline" color="gray" size="sm">
+                                    {order.packaging === 'TUPPERWARE' ? '🍱 Tupperware' : '📦 Carton'}
+                                </Badge>
+                                {order.isReturningContainer && (
+                                    <Badge variant="outline" color="orange" size="sm">
+                                        ↩️ Retour Tupperware ({order.containersReturnedCount})
+                                    </Badge>
+                                )}
+                            </Group>
 
                             <Stack gap="xs">
                                 {order.items.map(orderItem => (
-                                    <Group key={orderItem.id} justify="space-between">
+                                    <Group key={orderItem.id} justify="space-between" align="flex-start">
                                         <div>
-                                            <Text size="sm">{orderItem.item.name}</Text>
-                                            {/* @ts-ignore -- selectedOption might trigger TS until regen */}
-                                            {orderItem.selectedOption && (
-                                                <Text size="xs" c="dimmed" fs="italic">
-                                                    Option: {orderItem.selectedOption === 'VEGETARIAN' ? 'Végétarien' :
-                                                        orderItem.selectedOption === 'VEGAN' ? 'Végan' :
-                                                            orderItem.selectedOption === 'HALAL' ? 'Halal' :
-                                                                orderItem.selectedOption === 'GLUTEN_FREE' ? 'Sans Gluten' :
-                                                                    orderItem.selectedOption === 'SPICY' ? 'Épicé' :
-                                                                        orderItem.selectedOption}
-                                                </Text>
-                                            )}
+                                            <Text size="sm" fw={500}>{orderItem.item.name}</Text>
+
+                                            <Group gap={4} mt={4}>
+                                                {/* Legacy Option */}
+                                                {/* @ts-ignore */}
+                                                {orderItem.selectedOption && (
+                                                    <Badge size="xs" variant="light" color={
+                                                        orderItem.selectedOption === 'VEGETARIAN' ? 'green' :
+                                                            orderItem.selectedOption === 'VEGAN' ? 'teal' :
+                                                                orderItem.selectedOption === 'HALAL' ? 'grape' :
+                                                                    orderItem.selectedOption === 'GLUTEN_FREE' ? 'yellow' :
+                                                                        orderItem.selectedOption === 'SPICY' ? 'red' : 'gray'
+                                                    }>
+                                                        {orderItem.selectedOption === 'VEGETARIAN' ? 'Végétarien' :
+                                                            orderItem.selectedOption === 'VEGAN' ? 'Végan' :
+                                                                orderItem.selectedOption === 'HALAL' ? 'Halal' :
+                                                                    orderItem.selectedOption === 'GLUTEN_FREE' ? 'Sans Gluten' :
+                                                                        orderItem.selectedOption === 'SPICY' ? 'Épicé' :
+                                                                            orderItem.selectedOption}
+                                                    </Badge>
+                                                )}
+
+                                                {/* Complex Options */}
+                                                {/* @ts-ignore */}
+                                                {orderItem.selectedOptions && orderItem.item.optionGroups && (
+                                                    <>
+                                                        {/* @ts-ignore */}
+                                                        {Object.entries(orderItem.selectedOptions).map(([groupId, selection]) => {
+                                                            const group = orderItem.item.optionGroups.find(g => g.id === groupId);
+                                                            if (!group) return null;
+
+                                                            const ids = Array.isArray(selection) ? selection : [selection];
+                                                            // @ts-ignore
+                                                            const options = ids.map(id => group.options.find(o => o.id === id)).filter(Boolean);
+
+                                                            if (options.length === 0) return null;
+
+                                                            return options.map(opt => {
+                                                                let color = 'gray';
+                                                                const lowerName = opt.name.toLowerCase();
+                                                                const lowerGroup = group.name.toLowerCase();
+
+                                                                if (lowerName.includes('végé')) color = 'green';
+                                                                else if (lowerName.includes('végan')) color = 'teal';
+                                                                else if (lowerName.includes('halal')) color = 'grape'; // strictly checks opt name first
+                                                                else if (lowerName.includes('gluten') || lowerGroup.includes('gluten')) color = 'yellow';
+                                                                else if (lowerName.includes('épicé') || lowerGroup.includes('épice')) color = 'red';
+                                                                else if (lowerGroup.includes('protéine')) color = 'blue';
+
+                                                                return (
+                                                                    <Badge key={opt.id} size="xs" variant="light" color={color}>
+                                                                        {opt.name}
+                                                                    </Badge>
+                                                                );
+                                                            });
+                                                        })}
+                                                    </>
+                                                )}
+                                            </Group>
                                         </div>
                                         <Text size="sm">{orderItem.item.price} €</Text>
                                     </Group>
