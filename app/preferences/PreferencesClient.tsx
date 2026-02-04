@@ -15,11 +15,13 @@ import {
     ActionIcon,
     Modal,
     TextInput,
-    Textarea
+    Textarea,
+    Alert
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
+import { useSearchParams } from 'next/navigation';
 import { IconTrash, IconPlus, IconMapPin, IconDeviceFloppy, IconPencil } from '@tabler/icons-react';
 import { useState } from 'react';
 import { updateDietaryPreferences, addAddressAction, deleteAddressAction, updateAddressAction } from './actions';
@@ -34,13 +36,22 @@ const DIETARY_LABELS: Record<string, string> = {
 };
 
 type UserWithAddresses = {
+    email: string;
+    phoneNumber: string | null;
+    containerBalance: number;
     dietaryPreferences: DietaryOption[];
     addresses: Address[];
 };
 
 export default function PreferencesClient({ user }: { user: UserWithAddresses }) {
+    const searchParams = useSearchParams();
+    const onboarding = searchParams.get('onboarding');
+
     const [dietary, setDietary] = useState<string[]>(user.dietaryPreferences);
+    const [phoneNumber, setPhoneNumber] = useState<string>(user.phoneNumber || '');
+
     const [loadingInfo, { toggle: setLoadingInfo }] = useDisclosure(false);
+    const [loadingPhone, { toggle: setLoadingPhone }] = useDisclosure(false);
 
     // Address Modal
     const [opened, { open, close }] = useDisclosure(false);
@@ -70,6 +81,24 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             }
         } finally {
             setLoadingInfo();
+        }
+    };
+
+    // @ts-ignore
+    const handleSavePhone = async () => {
+        if (!phoneNumber) return;
+        setLoadingPhone();
+        try {
+            // @ts-ignore
+            const { updatePhoneNumber } = await import('./actions'); // Lazy import or ensure it is imported
+            const res = await updatePhoneNumber(phoneNumber);
+            if (res.success) {
+                notifications.show({ title: 'Succès', message: 'Téléphone enregistré', color: 'green' });
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } finally {
+            setLoadingPhone();
         }
     };
 
@@ -135,6 +164,53 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
         <Container size="md" py="xl">
             <Title order={2} mb="lg">Mon Profil & Préférences</Title>
 
+            {onboarding && (
+                <Alert title="Bienvenue !" color="blue" mb="xl">
+                    Avant de passer votre première commande, merci de renseigner votre numéro de téléphone et au moins une adresse de livraison.
+                </Alert>
+            )}
+
+            <Paper withBorder p="lg" radius="md" mb="xl">
+                <Title order={4} mb="md">Informations Personnelles</Title>
+                <Stack gap="md">
+                    <TextInput
+                        label="Email"
+                        value={user.email}
+                        disabled
+                        description="Provenant de votre compte Google"
+                    />
+
+                    <Group align="flex-end">
+                        <TextInput
+                            label="Téléphone"
+                            placeholder="06 12 34 56 78"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.currentTarget.value)}
+                            style={{ flex: 1 }}
+                        />
+                        <Button
+                            onClick={handleSavePhone}
+                            loading={loadingPhone}
+                            disabled={phoneNumber === (user.phoneNumber || '')}
+                        >
+                            Enregistrer
+                        </Button>
+                    </Group>
+
+                    <Card bg="blue.0" withBorder radius="md" p="md">
+                        <Group>
+                            <Text size="xl">🍱</Text>
+                            <div>
+                                <Text fw={600}>Mes Tupperwares</Text>
+                                <Text size="sm">
+                                    En votre possession : <Text span fw={700} c="blue" size="lg">{user.containerBalance}</Text>
+                                </Text>
+                            </div>
+                        </Group>
+                    </Card>
+                </Stack>
+            </Paper>
+
             <Paper withBorder p="lg" radius="md" mb="xl">
                 <Group justify="space-between" mb="md">
                     <Title order={4}>Régime Alimentaire</Title>
@@ -143,12 +219,13 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                         onClick={handleSaveDietary}
                         loading={loadingInfo}
                         variant="light"
+                        disabled={JSON.stringify(dietary.sort()) === JSON.stringify(user.dietaryPreferences.sort())}
                     >
                         Enregistrer
                     </Button>
                 </Group>
                 <Text size="sm" c="dimmed" mb="md">
-                    Sélectionnez vos contraintes alimentaires. Ces informations seront utilisées pour filtrer les menus et alerter les chefs.
+                    Sélectionnez vos contraintes alimentaires. Ces informations seront utilisées par votre chef préféré pour concocter les prochains menus.
                 </Text>
 
                 <Chip.Group multiple value={dietary} onChange={setDietary}>

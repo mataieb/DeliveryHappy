@@ -6,6 +6,7 @@ import { notifications } from '@mantine/notifications';
 import { createOrderAction } from '../actions';
 import { MenuItem, Address, Menu } from '@prisma/client';
 import { useState } from 'react';
+import dayjs from 'dayjs';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { IconAlertCircle } from '@tabler/icons-react';
@@ -38,6 +39,7 @@ type Props = {
     menu: Menu & { items: MenuItemWithOptions[] };
     addresses: Address[];
     containerBalance: number;
+    userPhoneNumber: string | null;
 }; // @ts-ignore
 
 const DIETARY_LABELS: Record<string, string> = {
@@ -49,7 +51,7 @@ const DIETARY_LABELS: Record<string, string> = {
 };
 
 // @ts-ignore
-export default function OrderClient({ menu, addresses, containerBalance }: Props) {
+export default function OrderClient({ menu, addresses, containerBalance, userPhoneNumber }: Props) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -72,6 +74,19 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
 
     const handleSubmit = async (values: typeof form.values) => {
         setLoading(true);
+
+        if (!userPhoneNumber) {
+            notifications.show({
+                title: 'Profil incomplet',
+                message: 'Veuillez renseigner votre numéro de téléphone dans vos préférences pour commander.',
+                color: 'red',
+                autoClose: 5000
+            });
+            setLoading(false);
+            setTimeout(() => router.push('/preferences'), 2000);
+            return;
+        }
+
         const address = addresses.find(a => a.id === values.addressId);
         if (!address) {
             setLoading(false);
@@ -146,7 +161,7 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
 
     return (
         <Container size="sm" py="xl">
-            <Title mb="lg">Finaliser ma commande</Title>
+            <Title mb="lg">Finaliser ma commande du {dayjs(menu.date).format('DD/MM/YYYY')}</Title>
 
             <form onSubmit={form.onSubmit(handleSubmit)}>
                 <Stack gap="xl">
@@ -365,6 +380,7 @@ export default function OrderClient({ menu, addresses, containerBalance }: Props
                             <Text size="xl" fw={700}>Total</Text>
                             <Text size="xl" fw={700} c="blue">{selectedTotal.toFixed(2)} €</Text>
                         </Group>
+                        <Text size="sm" c="dimmed" mt="xs" ta="center">Règlement sur place en wero, lydia ou cash</Text>
                     </Card>
 
                     <Button size="lg" type="submit" loading={loading} disabled={addresses.length === 0}>

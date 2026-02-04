@@ -23,6 +23,23 @@ export async function updateDietaryPreferences(preferences: DietaryOption[]) {
     }
 }
 
+export async function updatePhoneNumber(phoneNumber: string) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return { success: false, error: "Non authentifié" };
+
+    try {
+        await prisma.user.update({
+            where: { id: session.user.id },
+            data: { phoneNumber },
+        });
+        revalidatePath('/preferences');
+        return { success: true };
+    } catch (error) {
+        console.error(error);
+        return { success: false, error: "Erreur lors de la mise à jour" };
+    }
+}
+
 export async function addAddressAction(label: string, content: string, details?: string) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return { success: false, error: "Non authentifié" };

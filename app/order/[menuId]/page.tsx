@@ -70,5 +70,5 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
     projectedBalance = Math.max(0, projectedBalance);
 
     // @ts-ignore
-    return <OrderClient menu={menu} addresses={user.addresses} containerBalance={projectedBalance} />;
+    return <OrderClient menu={menu} addresses={user.addresses} containerBalance={projectedBalance} userPhoneNumber={user.phoneNumber} />;
 }

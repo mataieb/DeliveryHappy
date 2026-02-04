@@ -11,11 +11,18 @@ export const dynamic = 'force-dynamic';
 
 export default async function MenuPage() {
     const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+        redirect("/api/auth/signin");
+    }
 
-    // NOTE: Validation disabled for development viewing
-    // if (!session) {
-    //   redirect("/login");
-    // }
+    const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: { addresses: true }
+    });
+
+    if (user && (!user.phoneNumber || user.addresses.length === 0)) {
+        redirect("/preferences?onboarding=true");
+    }
 
     // Get start and end of current week (Monday to Sunday)
     const today = dayjs();

@@ -77,10 +77,7 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
             </Text>
 
             <Group justify="space-between" mt="md">
-                <Text fw={700} size="lg">${item.price.toFixed(2)}</Text>
-                <Button variant="light" color="indigo" radius="md">
-                    Add
-                </Button>
+                <Text fw={700} size="lg">{item.price.toFixed(2)} €</Text>
             </Group>
         </Card>
     )

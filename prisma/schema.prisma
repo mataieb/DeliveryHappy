@@ -25,6 +25,7 @@ model User {
   orders        Order[]
   addresses     Address[]
   dietaryPreferences DietaryOption[]
+  phoneNumber   String?
   containerBalance Int       @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
