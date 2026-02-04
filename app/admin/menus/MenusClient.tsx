@@ -56,8 +56,8 @@ type MenuWithItems = {
     items: {
         id: string;
         name: string;
-        description: string; // Changed from string | null
-        ingredients: string; // Changed from string | null
+        description: string | null;
+        ingredients: string | null;
         price: number;
         category: string;
         dietaryOptions: string[];

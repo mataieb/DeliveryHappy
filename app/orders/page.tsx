@@ -99,7 +99,7 @@ export default async function OrderHistoryPage() {
 
                                                             const ids = Array.isArray(selection) ? selection : [selection];
                                                             // @ts-ignore
-                                                            const options = ids.map(id => group.options.find(o => o.id === id)).filter(Boolean);
+                                                            const options = ids.map((id: any) => group.options.find(o => o.id === id)).filter((o) => !!o) as any[];
 
                                                             if (options.length === 0) return null;
 
