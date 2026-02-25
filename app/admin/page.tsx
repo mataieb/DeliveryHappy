@@ -1,5 +1,6 @@
-import { Container, Grid, GridCol, Paper, Text, Title, Group, ThemeIcon, Stack, Card, Badge, SimpleGrid, Divider } from '@mantine/core';
-import { IconCoin, IconReceipt, IconUsers, IconChefHat, IconSalad, IconCake } from '@tabler/icons-react';
+import { Container, Grid, GridCol, Paper, Text, Title, Group, ThemeIcon, Stack, Card, Badge, SimpleGrid, Divider, Button } from '@mantine/core';
+import { IconCoin, IconReceipt, IconUsers, IconChefHat, IconSalad, IconCake, IconSettings } from '@tabler/icons-react';
+import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
@@ -102,7 +103,18 @@ export default async function AdminDashboard() {
 
     return (
         <Container fluid>
-            <Title order={2} mb="lg">Tableau de bord</Title>
+            <Group justify="space-between" mb="lg">
+                <Title order={2}>Tableau de bord</Title>
+                <Link href="/admin/settings" style={{ textDecoration: 'none' }}>
+                    <Button
+                        variant="light"
+                        leftSection={<IconSettings size={16} />}
+                        size="sm"
+                    >
+                        Réglages
+                    </Button>
+                </Link>
+            </Group>
 
             {/* Stats globales */}
             <Grid mb="xl">

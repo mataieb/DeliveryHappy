@@ -8,14 +8,15 @@ import { IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboar
 
 export function UserNav() {
     const pathname = usePathname();
-    const { data: session } = useSession();
+    const { data: session, status } = useSession();
 
     // Hide on login/api pages
-    if (pathname?.startsWith('/api')) return null;
+    if (pathname?.startsWith('/api') || pathname?.startsWith('/login')) return null;
 
     const isOrderPage = pathname?.startsWith('/order/');
     const isAdminPage = pathname?.startsWith('/admin');
     const isAdmin = session?.user?.role === 'ADMIN';
+    const isAuthenticated = status === 'authenticated';
 
     return (
         <div style={{ borderBottom: '1px solid #eee', backgroundColor: 'white', marginBottom: '20px' }}>
@@ -55,14 +56,16 @@ export function UserNav() {
                             >
                                 Vue Client
                             </Button>
-                            <Button
-                                variant="light"
-                                color="red"
-                                leftSection={<IconLogout size={16} />}
-                                onClick={() => signOut()}
-                            >
-                                Déconnexion
-                            </Button>
+                            {isAuthenticated && (
+                                <Button
+                                    variant="light"
+                                    color="red"
+                                    leftSection={<IconLogout size={16} />}
+                                    onClick={() => signOut()}
+                                >
+                                    Déconnexion
+                                </Button>
+                            )}
                         </Group>
                     </Group>
                 ) : (
@@ -92,14 +95,16 @@ export function UserNav() {
                                     Back Office
                                 </Button>
                             )}
-                            <Button
-                                variant="light"
-                                color="red"
-                                leftSection={<IconLogout size={16} />}
-                                onClick={() => signOut()}
-                            >
-                                Déconnexion
-                            </Button>
+                            {isAuthenticated && (
+                                <Button
+                                    variant="light"
+                                    color="red"
+                                    leftSection={<IconLogout size={16} />}
+                                    onClick={() => signOut()}
+                                >
+                                    Déconnexion
+                                </Button>
+                            )}
                         </Group>
                     </Group>
                 )}

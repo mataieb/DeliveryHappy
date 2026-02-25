@@ -15,6 +15,16 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
         }
     }
 
+    const getCategoryLabel = (cat: ItemCategory) => {
+        switch (cat) {
+            case 'MAIN': return 'Plat';
+            case 'STARTER': return 'Entrée';
+            case 'DESSERT': return 'Dessert';
+            case 'DRINK': return 'Boisson';
+            default: return cat;
+        }
+    }
+
     const getDietaryIcon = (option: DietaryOption) => {
         const style = { width: rem(16), height: rem(16) };
         switch (option) {
@@ -29,10 +39,10 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
 
     const getDietaryLabel = (option: DietaryOption) => {
         switch (option) {
-            case 'VEGETARIAN': return 'Vegetarian';
+            case 'VEGETARIAN': return 'Végétarien';
             case 'VEGAN': return 'Vegan';
-            case 'GLUTEN_FREE': return 'Gluten Free';
-            case 'SPICY': return 'Spicy';
+            case 'GLUTEN_FREE': return 'Sans Gluten';
+            case 'SPICY': return 'Épicé';
             case 'HALAL': return 'Halal';
             default: return option;
         }
@@ -53,7 +63,7 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
         <Card shadow="sm" padding="lg" radius="md" withBorder>
             <Group justify="space-between" mt="md" mb="xs">
                 <Text fw={500}>{item.name}</Text>
-                <Badge color={getBadgeColor(item.category)}>{item.category}</Badge>
+                <Badge color={getBadgeColor(item.category)}>{getCategoryLabel(item.category)}</Badge>
             </Group>
 
             {item.dietaryOptions && item.dietaryOptions.length > 0 && (

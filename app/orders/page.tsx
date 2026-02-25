@@ -1,11 +1,30 @@
-import { Container, Title, Text, Card, Group, Badge, Stack, Grid } from "@mantine/core";
+import { Container, Title, Text, Card, Group, Badge, Stack } from "@mantine/core";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import dayjs from "dayjs";
+import 'dayjs/locale/fr';
 
 export const dynamic = 'force-dynamic';
+
+const STATUS_LABELS: Record<string, string> = {
+    PENDING: 'En attente',
+    IN_KITCHEN: 'En préparation',
+    IN_DELIVERY: 'En livraison',
+    DELIVERED: 'Livrée',
+    PAID: 'Payée',
+    CANCELLED: 'Annulée',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+    PENDING: 'blue',
+    IN_KITCHEN: 'orange',
+    IN_DELIVERY: 'yellow',
+    DELIVERED: 'green',
+    PAID: 'teal',
+    CANCELLED: 'red',
+};
 
 export default async function OrderHistoryPage() {
     const session = await getServerSession(authOptions);
@@ -42,9 +61,9 @@ export default async function OrderHistoryPage() {
                         <Card key={order.id} withBorder shadow="sm" radius="md">
                             <Group justify="space-between" mb="xs">
                                 <Group>
-                                    <Text fw={700}>Commande du {dayjs(order.menu.date).format('DD/MM/YYYY')}</Text>
-                                    <Badge color={order.status === 'PENDING' ? 'blue' : order.status === 'DELIVERED' ? 'green' : 'gray'}>
-                                        {order.status}
+                                    <Text fw={700}>Commande du {dayjs(order.menu.date).locale('fr').format('DD/MM/YYYY')}</Text>
+                                    <Badge color={STATUS_COLORS[order.status] ?? 'gray'}>
+                                        {STATUS_LABELS[order.status] ?? order.status}
                                     </Badge>
                                 </Group>
                                 <Text fw={700} c="blue">{order.total.toFixed(2)} €</Text>

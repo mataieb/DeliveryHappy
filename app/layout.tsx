@@ -13,8 +13,8 @@ const outfit = Outfit({ subsets: ["latin"] });
 
 
 export const metadata: Metadata = {
-  title: "Lunch Connect",
-  description: "Order lunch for friends and family",
+  title: "Maitre Taieb's Kitchen",
+  description: "Commandez votre déjeuner en quelques clics",
 };
 
 export default function RootLayout({
@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning>
       <head>
         <ColorSchemeScript />
       </head>

@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect, notFound } from "next/navigation";
 import OrderClient from "./OrderClient";
+import { getAllSettingsAction } from "@/app/admin/settings/actions";
 
 export const dynamic = 'force-dynamic';
 
@@ -12,28 +13,27 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
 
     const { menuId } = await params;
 
-    const menu = await prisma.menu.findUnique({
-        where: { id: menuId },
-        include: {
-            items: {
-                include: {
-                    optionGroups: {
-                        include: {
-                            options: true
+    const [menu, user, settings] = await Promise.all([
+        prisma.menu.findUnique({
+            where: { id: menuId },
+            include: {
+                items: {
+                    include: {
+                        optionGroups: {
+                            include: { options: true }
                         }
                     }
                 }
-            }
-        },
-    });
+            },
+        }),
+        prisma.user.findUnique({
+            where: { id: session.user.id },
+            include: { addresses: true },
+        }),
+        getAllSettingsAction(),
+    ]);
 
     if (!menu) notFound();
-
-    const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        include: { addresses: true },
-    });
-
     if (!user) redirect("/api/auth/signin");
 
     // @ts-ignore
@@ -44,9 +44,7 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
         where: {
             userId: session.user.id,
             status: { in: ['PENDING', 'IN_KITCHEN', 'IN_DELIVERY'] },
-            menu: {
-                date: { lt: menu.date }
-            }
+            menu: { date: { lt: menu.date } }
         },
         // @ts-ignore
         select: { status: true, packaging: true, isReturningContainer: true }
@@ -54,21 +52,19 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
 
     let projectedBalance = currentBalance;
     for (const o of activeOrders) {
-        // Incoming Tupperware (Not yet added to balance)
         // @ts-ignore
-        if (o.packaging === 'TUPPERWARE' && ['PENDING', 'IN_KITCHEN'].includes(o.status)) {
-            projectedBalance++;
-        }
-        // Outgoing Return (Not yet subtracted from balance)
+        if (o.packaging === 'TUPPERWARE' && ['PENDING', 'IN_KITCHEN'].includes(o.status)) projectedBalance++;
         // @ts-ignore
-        if (o.isReturningContainer) { // Valid for Pending, Kitchen, AND Delivery
-            projectedBalance--;
-        }
+        if (o.isReturningContainer) projectedBalance--;
     }
-
-    // Safety clamp (Balance shouldn't be negative physically, though math might allow it if data weird)
     projectedBalance = Math.max(0, projectedBalance);
 
     // @ts-ignore
-    return <OrderClient menu={menu} addresses={user.addresses} containerBalance={projectedBalance} userPhoneNumber={user.phoneNumber} />;
+    return <OrderClient
+        menu={menu}
+        addresses={user.addresses}
+        containerBalance={projectedBalance}
+        userPhoneNumber={user.phoneNumber}
+        tupperwareEnabled={settings.tupperwareEnabled}
+    />;
 }

@@ -142,19 +142,35 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
                 }
 
                 // Parse Dietary Option Groups
-                item.dietaryOptions.forEach(tag => {
-                    if (tag === 'SPICY') return; // Spicy is handled by spiceLevel, not an option group
+                // Groups are stored as "Variantes / Régimes" (for veg/vegan/halal) and "Option Sans Gluten"
+                const variantGroup = item.optionGroups.find(g => g.name === "Variantes / Régimes");
+                const glutenGroup = item.optionGroups.find(g => g.name === "Option Sans Gluten");
 
-                    const groupName = `Option ${tag}`;
-                    const dietaryGroup = item.optionGroups.find(g => g.name === groupName);
-                    if (dietaryGroup && dietaryGroup.options.length > 0) {
-                        dietaryConfigs[tag] = {
-                            price: dietaryGroup.options[0].price,
-                            description: dietaryGroup.options[0].description || ''
-                        };
+                item.dietaryOptions.forEach(tag => {
+                    if (tag === 'SPICY') return; // handled by spiceLevel
+
+                    if (tag === 'GLUTEN_FREE') {
+                        if (glutenGroup && glutenGroup.options.length > 0) {
+                            dietaryConfigs[tag] = {
+                                price: glutenGroup.options[0].price,
+                                description: glutenGroup.options[0].description || ''
+                            };
+                        } else {
+                            dietaryConfigs[tag] = { price: 0, description: '' };
+                        }
                     } else {
-                        // Initialize if tag is present but no specific option group found
-                        dietaryConfigs[tag] = { price: 0, description: '' };
+                        // Look for the matching option in the Variantes group
+                        const DIETARY_LABELS_MAP: Record<string, string> = {
+                            'VEGETARIAN': 'Végétarienne',
+                            'VEGAN': 'Végan',
+                            'HALAL': 'Halal',
+                        };
+                        const optionName = `Version ${DIETARY_LABELS_MAP[tag] || tag}`;
+                        const matchingOption = variantGroup?.options.find(o => o.name === optionName);
+                        dietaryConfigs[tag] = {
+                            price: matchingOption?.price ?? 0,
+                            description: matchingOption?.description || ''
+                        };
                     }
                 });
 
@@ -240,27 +256,29 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
                     }
 
                     const config = item._dietaryConfigs[tag];
-                    // Only process if config allows (price > 0 or has description)
-                    if (config && (config.price > 0 || config.description)) {
-                        if (tag === 'GLUTEN_FREE') {
-                            glutenFreeGroup = {
-                                name: "Option Sans Gluten",
-                                isRequired: false,
-                                allowMultiple: false,
-                                maxOptions: 1,
-                                options: [{
-                                    name: "Version Sans Gluten",
-                                    price: config.price,
-                                    description: config.description || undefined
-                                }]
-                            };
-                        } else {
-                            variantsOptions.push({
-                                name: `Version ${DIETARY_LABELS_MAP[tag] || tag}`,
-                                price: config.price,
-                                description: config.description || undefined
-                            });
-                        }
+                    // Always create an option group for the tag if it's selected
+                    // (even if price=0 and description empty — the option must exist to be selectable)
+                    const optionPrice = config ? Number(config.price) || 0 : 0;
+                    const optionDesc = config?.description?.trim() || undefined;
+
+                    if (tag === 'GLUTEN_FREE') {
+                        glutenFreeGroup = {
+                            name: "Option Sans Gluten",
+                            isRequired: false,
+                            allowMultiple: false,
+                            maxOptions: 1,
+                            options: [{
+                                name: "Version Sans Gluten",
+                                price: optionPrice,
+                                description: optionDesc
+                            }]
+                        };
+                    } else {
+                        variantsOptions.push({
+                            name: `Version ${DIETARY_LABELS_MAP[tag] || tag}`,
+                            price: optionPrice,
+                            description: optionDesc
+                        });
                     }
                 });
 
@@ -397,7 +415,7 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
 
                                                 {/* Protein Check */}
                                                 {item.optionGroups.some(g => g.name.includes('Protéines')) && (
-                                                    <Badge size="xs" variant="outline" color="blue">Includes Protéines</Badge>
+                                                    <Badge size="xs" variant="outline" color="blue">+ Supplément Protéines</Badge>
                                                 )}
                                             </Group>
                                         </Box>
@@ -468,7 +486,21 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
                                                 data={DIETARY_OPTIONS}
                                                 placeholder="Sélectionner..."
                                                 hidePickedOptions
-                                                {...form.getInputProps(`items.${index}.dietaryOptions`)}
+                                                value={form.values.items[index].dietaryOptions as string[]}
+                                                onChange={(newTags) => {
+                                                    form.setFieldValue(`items.${index}.dietaryOptions`, newTags as any);
+                                                    // Initialize _dietaryConfigs for newly added tags
+                                                    // Without this, _dietaryConfigs[tag] is undefined and Mantine
+                                                    // can't write price/description into a non-existent nested object
+                                                    const currentConfigs = form.values.items[index]._dietaryConfigs || {};
+                                                    const updatedConfigs = { ...currentConfigs };
+                                                    newTags.forEach(tag => {
+                                                        if (!updatedConfigs[tag]) {
+                                                            updatedConfigs[tag] = { price: 0, description: '' };
+                                                        }
+                                                    });
+                                                    form.setFieldValue(`items.${index}._dietaryConfigs`, updatedConfigs);
+                                                }}
                                             />
 
                                             {/* 2. Protein Checkbox */}

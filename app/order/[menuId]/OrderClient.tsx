@@ -40,6 +40,7 @@ type Props = {
     addresses: Address[];
     containerBalance: number;
     userPhoneNumber: string | null;
+    tupperwareEnabled: boolean;
 }; // @ts-ignore
 
 const DIETARY_LABELS: Record<string, string> = {
@@ -51,7 +52,7 @@ const DIETARY_LABELS: Record<string, string> = {
 };
 
 // @ts-ignore
-export default function OrderClient({ menu, addresses, containerBalance, userPhoneNumber }: Props) {
+export default function OrderClient({ menu, addresses, containerBalance, userPhoneNumber, tupperwareEnabled }: Props) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -64,11 +65,11 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
             packaging: 'CARDBOARD' as 'CARDBOARD' | 'TUPPERWARE',
             returnCount: containerBalance > 0 ? containerBalance : 0,
             notes: '',
+            timeConstraint: '',
         },
         validate: {
             selectedItems: (val) => (val.length === 0 ? 'Veuillez choisir au moins un plat' : null),
             addressId: (val) => (val ? null : 'Veuillez choisir une adresse'),
-            // Optional: Add validation for required option groups
         },
     });
 
@@ -120,13 +121,18 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
             selectedOptions: values.complexOptions[id]
         }));
 
+        // Merge time constraint into notes
+        const fullNotes = values.timeConstraint
+            ? `${values.notes ? values.notes + '\n' : ''}⏰ Contrainte horaire : ${values.timeConstraint}`
+            : values.notes;
+
         // @ts-ignore
-        const res = await createOrderAction(menu.id, items, fullAddress, values.packaging, values.returnCount, values.notes, undefined);
+        const res = await createOrderAction(menu.id, items, fullAddress, values.packaging, values.returnCount, fullNotes, undefined);
 
         setLoading(false);
         if (res.success) {
             notifications.show({ title: 'Commande validée', message: 'Bon appétit !', color: 'green' });
-            router.push('/menu'); // Redirect to home
+            router.push('/orders'); // Redirect to order history
         } else {
             notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
         }
@@ -200,18 +206,8 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
                                         {form.values.selectedItems.includes(item.id) && (
                                             <div style={{ marginLeft: '32px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-                                                {/* Legacy Dietary Options - KEEPING FOR BACKWARD COMPATIBILITY but mostly superseded by Tags */}
-                                                {item.dietaryOptions && item.dietaryOptions.length > 0 && item.dietaryOptions.some(d => d !== 'SPICY') && (
-                                                    <Group gap="xs" mb="xs">
-                                                        {item.dietaryOptions.filter(d => d !== 'SPICY').map(opt => (
-                                                            <Badge key={opt} variant="dot" size="xs" color="gray">
-                                                                {DIETARY_LABELS[opt] || opt}
-                                                            </Badge>
-                                                        ))}
-                                                    </Group>
-                                                )}
-
-                                                {/* New Complex Option Groups */}
+                                                {/* Option Groups (dietary variants, spice level, protein, etc.) */}
+                                                {/* These are now created properly via the admin form and are fully selectable */}
                                                 {item.optionGroups.map(group => (
                                                     <div key={group.id}>
                                                         <Text size="sm" fw={500}>
@@ -314,19 +310,37 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
                             >
                                 <Stack mt="xs">
                                     <Radio value="CARDBOARD" label="Carton (Jetable/Recyclable)" />
-                                    <Radio value="TUPPERWARE" label="Tupperware (Consigne à rendre - Stock limité)" />
+                                    <Radio
+                                        value="TUPPERWARE"
+                                        label="Tupperware (Consigne à rendre - Stock limité)"
+                                        disabled={!tupperwareEnabled}
+                                        styles={!tupperwareEnabled ? {
+                                            label: { color: '#adb5bd', cursor: 'not-allowed' },
+                                            radio: { cursor: 'not-allowed' },
+                                        } : {}}
+                                    />
                                 </Stack>
                             </Radio.Group>
 
-                            {(form.values.packaging === 'TUPPERWARE') && (
+                            {!tupperwareEnabled && (
+                                <Alert
+                                    icon={<IconAlertCircle size={16} />}
+                                    color="gray"
+                                    title="Tupperware non disponible"
+                                    variant="light"
+                                >
+                                    <Text size="sm" c="dimmed">
+                                        Le service de consigne Tupperware n'est pas disponible pour ce service.
+                                        Votre commande sera livrée dans une boîte carton.
+                                    </Text>
+                                </Alert>
+                            )}
+
+                            {tupperwareEnabled && form.values.packaging === 'TUPPERWARE' && (
                                 <Alert icon={<IconAlertCircle size={16} />} color="blue" title="Fonctionnement Consigne">
                                     En choisissant Tupperware, vous vous engagez à le restituer à la commande suivante.
                                 </Alert>
                             )}
-
-                            <Divider />
-
-                            <Divider />
 
                             <Text fw={500} size="sm" mb={4}>Retour de contenants</Text>
                             {containerBalance > 0 ? (
@@ -348,7 +362,27 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
                     </Card>
 
                     <Card withBorder radius="md">
-                        <Title order={4} mb="md">3. Adresse de livraison</Title>
+                        <Title order={4} mb="md">3. Adresse et heure de livraison</Title>
+
+                        <Alert icon={<IconAlertCircle size={16} />} color="blue" mb="md">
+                            <Text size="sm">
+                                La livraison est prévue <strong>entre 11h et 13h</strong> et vous serez tenu au courant d'une heure plus précise ultérieurement.
+                            </Text>
+                            <Text size="sm" mt={4}>
+                                Si vous avez un empêchement sur une partie de cette plage horaire, merci de le préciser ci-dessous.
+                            </Text>
+                        </Alert>
+
+                        <Textarea
+                            label="Contrainte horaire (optionnel)"
+                            placeholder="Ex : Indisponible avant 11h30, ou absent après 12h15..."
+                            autosize
+                            minRows={2}
+                            mb="md"
+                            {...form.getInputProps('timeConstraint')}
+                        />
+
+                        <Divider label="Adresse de livraison" labelPosition="left" mb="md" />
 
                         {addresses.length === 0 ? (
                             <Alert icon={<IconAlertCircle size={16} />} title="Aucune adresse" color="yellow">

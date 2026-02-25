@@ -4,6 +4,7 @@ import { Menu, MenuItem, DietaryOption } from "@prisma/client";
 import { Tabs, SimpleGrid, Text, Group, Button, Badge } from "@mantine/core";
 import Link from "next/link";
 import dayjs from "dayjs";
+import 'dayjs/locale/fr';
 import { useState } from "react";
 import MenuItemCard from "./MenuItemCard";
 
@@ -43,7 +44,7 @@ export default function MenuList({ menus }: MenuListProps) {
                                 color={isPast ? 'gray' : undefined}
                                 style={{ opacity: isPast ? 0.6 : 1 }}
                             >
-                                {dayjs(menu.date).format("dddd, MMM D")}
+                                {dayjs(menu.date).locale('fr').format("dddd D MMM")}
                                 {isPast && <Badge size="xs" color="gray" ml="xs">Passé</Badge>}
                             </Tabs.Tab>
                         );

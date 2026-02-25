@@ -47,7 +47,7 @@ export default async function MenuPage() {
     return (
         <Container size="lg" py="xl">
             <Group justify="space-between" mb="xl">
-                <Title>Lunch Menu</Title>
+                <Title>Menu de la semaine</Title>
             </Group>
             <MenuList menus={menus} />
         </Container>

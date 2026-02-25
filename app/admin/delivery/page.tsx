@@ -34,8 +34,13 @@ export default async function DeliveryRoutePage() {
                         not: 'CANCELLED'
                     }
                 },
-                include: {
-                    user: true
+                select: {
+                    id: true,
+                    deliveryAddress: true,
+                    notes: true,
+                    user: {
+                        select: { name: true, email: true }
+                    }
                 }
             }
         },

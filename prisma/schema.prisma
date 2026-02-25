@@ -182,3 +182,11 @@ model OrderItem {
   selectedOption String? // Deprecated or simple Note?
   selectedOptions Json?   // Stores complex selections { [groupId]: [optionId, optionId] }
 }
+
+// Global app settings stored as key-value pairs
+// Keys are unique strings; values are JSON-encoded (string, bool, number...)
+model AppSetting {
+  key       String   @id   // e.g. "tupperware_enabled"
+  value     String         // JSON-encoded value, e.g. "true" or "false"
+  updatedAt DateTime @updatedAt
+}
