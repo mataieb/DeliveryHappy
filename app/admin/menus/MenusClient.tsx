@@ -88,7 +88,7 @@ type MenuItemInputWithUIHelpers = MenuItemInput & {
 
 export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
     const [opened, { open, close }] = useDisclosure(false);
-    const [loading, { toggle: setLoading }] = useDisclosure(false);
+    const [loading, setLoading] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
     const form = useForm({
@@ -195,16 +195,23 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
 
     const handleDelete = async (id: string) => {
         if (!confirm('Supprimer ce menu ?')) return;
-        const res = await deleteMenuAction(id);
-        if (res.success) {
-            notifications.show({ title: 'Menu supprimé', color: 'green', message: '' });
-        } else {
-            notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+        setLoading(true);
+        try {
+            const res = await deleteMenuAction(id);
+            if (res.success) {
+                notifications.show({ title: 'Menu supprimé', color: 'green', message: '' });
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } catch (e) {
+            notifications.show({ title: 'Erreur', message: 'Impossible de supprimer le menu', color: 'red' });
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleSubmit = async (values: typeof form.values) => {
-        setLoading();
+        setLoading(true);
         try {
             const processedItems: MenuItemInput[] = values.items.map(item => {
                 const DIETARY_LABELS_MAP: Record<string, string> = {
@@ -338,7 +345,7 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
                 color: 'red',
             });
         } finally {
-            setLoading();
+            setLoading(false);
         }
     };
 

@@ -76,65 +76,71 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
     const handleSubmit = async (values: typeof form.values) => {
         setLoading(true);
 
-        if (!userPhoneNumber) {
-            notifications.show({
-                title: 'Profil incomplet',
-                message: 'Veuillez renseigner votre numéro de téléphone dans vos préférences pour commander.',
-                color: 'red',
-                autoClose: 5000
-            });
-            setLoading(false);
-            setTimeout(() => router.push('/preferences'), 2000);
-            return;
-        }
+        try {
+            if (!userPhoneNumber) {
+                notifications.show({
+                    title: 'Profil incomplet',
+                    message: 'Veuillez renseigner votre numéro de téléphone dans vos préférences pour commander.',
+                    color: 'red',
+                    autoClose: 5000
+                });
+                setLoading(false);
+                setTimeout(() => router.push('/preferences'), 2000);
+                return;
+            }
 
-        const address = addresses.find(a => a.id === values.addressId);
-        if (!address) {
-            setLoading(false);
-            return;
-        }
+            const address = addresses.find(a => a.id === values.addressId);
+            if (!address) {
+                setLoading(false);
+                return;
+            }
 
-        // Validate required groups
-        for (const itemId of values.selectedItems) {
-            const item = menu.items.find(i => i.id === itemId);
-            if (!item) continue;
-            for (const group of item.optionGroups) {
-                if (group.isRequired) {
-                    const selection = values.complexOptions[itemId]?.[group.id];
-                    if (!selection || (Array.isArray(selection) && selection.length === 0)) {
-                        notifications.show({ title: 'Attention', message: `Option requise pour ${item.name}: ${group.name}`, color: 'red' });
-                        setLoading(false);
-                        return;
+            // Validate required groups
+            for (const itemId of values.selectedItems) {
+                const item = menu.items.find(i => i.id === itemId);
+                if (!item) continue;
+                for (const group of item.optionGroups) {
+                    if (group.isRequired) {
+                        const selection = values.complexOptions[itemId]?.[group.id];
+                        if (!selection || (Array.isArray(selection) && selection.length === 0)) {
+                            notifications.show({ title: 'Attention', message: `Option requise pour ${item.name}: ${group.name}`, color: 'red' });
+                            setLoading(false);
+                            return;
+                        }
                     }
                 }
             }
-        }
 
-        // Format address for the order
-        // @ts-ignore
-        const fullAddress = `[${address.label}] ${address.content} ${address.details ? `\n(Complément: ${address.details})` : ''}`;
+            // Format address for the order
+            // @ts-ignore
+            const fullAddress = `[${address.label}] ${address.content} ${address.details ? `\n(Complément: ${address.details})` : ''}`;
 
-        // Build items array with options
-        const items = values.selectedItems.map(id => ({
-            id,
-            option: values.itemOptions[id],
-            selectedOptions: values.complexOptions[id]
-        }));
+            // Build items array with options
+            const items = values.selectedItems.map(id => ({
+                id,
+                option: values.itemOptions[id],
+                selectedOptions: values.complexOptions[id]
+            }));
 
-        // Merge time constraint into notes
-        const fullNotes = values.timeConstraint
-            ? `${values.notes ? values.notes + '\n' : ''}⏰ Contrainte horaire : ${values.timeConstraint}`
-            : values.notes;
+            // Merge time constraint into notes
+            const fullNotes = values.timeConstraint
+                ? `${values.notes ? values.notes + '\n' : ''}⏰ Contrainte horaire : ${values.timeConstraint}`
+                : values.notes;
 
-        // @ts-ignore
-        const res = await createOrderAction(menu.id, items, fullAddress, values.packaging, values.returnCount, fullNotes, undefined);
+            // @ts-ignore
+            const res = await createOrderAction(menu.id, items, fullAddress, values.packaging, values.returnCount, fullNotes, undefined);
 
-        setLoading(false);
-        if (res.success) {
-            notifications.show({ title: 'Commande validée', message: 'Bon appétit !', color: 'green' });
-            router.push('/orders'); // Redirect to order history
-        } else {
-            notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            if (res.success) {
+                notifications.show({ title: 'Commande validée', message: 'Bon appétit !', color: 'green' });
+                router.push('/orders'); // Redirect to order history
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } catch (err) {
+            console.error(err);
+            notifications.show({ title: 'Erreur', message: 'Une erreur est survenue lors de la commande.', color: 'red' });
+        } finally {
+            setLoading(false);
         }
     };
 

@@ -50,12 +50,12 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     const [dietary, setDietary] = useState<string[]>(user.dietaryPreferences);
     const [phoneNumber, setPhoneNumber] = useState<string>(user.phoneNumber || '');
 
-    const [loadingInfo, { toggle: setLoadingInfo }] = useDisclosure(false);
-    const [loadingPhone, { toggle: setLoadingPhone }] = useDisclosure(false);
+    const [loadingInfo, setLoadingInfo] = useState(false);
+    const [loadingPhone, setLoadingPhone] = useState(false);
 
     // Address Modal
     const [opened, { open, close }] = useDisclosure(false);
-    const [addressLoading, { toggle: setAddressLoading }] = useDisclosure(false);
+    const [addressLoading, setAddressLoading] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
     const addressForm = useForm({
@@ -71,7 +71,7 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     });
 
     const handleSaveDietary = async () => {
-        setLoadingInfo();
+        setLoadingInfo(true);
         try {
             const res = await updateDietaryPreferences(dietary as DietaryOption[]);
             if (res.success) {
@@ -79,15 +79,16 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             } else {
                 notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
             }
+        } catch (e) {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'enregistrement', color: 'red' });
         } finally {
-            setLoadingInfo();
+            setLoadingInfo(false);
         }
     };
 
-    // @ts-ignore
     const handleSavePhone = async () => {
         if (!phoneNumber) return;
-        setLoadingPhone();
+        setLoadingPhone(true);
         try {
             // @ts-ignore
             const { updatePhoneNumber } = await import('./actions'); // Lazy import or ensure it is imported
@@ -97,8 +98,10 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             } else {
                 notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
             }
+        } catch (e) {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'enregistrement', color: 'red' });
         } finally {
-            setLoadingPhone();
+            setLoadingPhone(false);
         }
     };
 
@@ -120,7 +123,7 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     };
 
     const handleSaveAddress = async (values: typeof addressForm.values) => {
-        setAddressLoading();
+        setAddressLoading(true);
         try {
             let res;
             if (editingId) {
@@ -141,8 +144,10 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             } else {
                 notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
             }
+        } catch (e) {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'enregistrement', color: 'red' });
         } finally {
-            setAddressLoading();
+            setAddressLoading(false);
         }
     };
 

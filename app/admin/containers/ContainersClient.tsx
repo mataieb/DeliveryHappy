@@ -1,21 +1,30 @@
 'use client';
 
+import { useState } from 'react';
 import { Container, Title, Text, Table, Tabs, Card, Badge, Stack, Grid, Button, Group } from '@mantine/core';
 import { manualDecrementAction } from './actions';
 import { notifications } from '@mantine/notifications';
 
 export default function ContainersClient({ debtors, menus, totalStock, currentOutstanding }: any) {
+    const [loadingId, setLoadingId] = useState<string | null>(null);
 
     let cumulativeTaken = 0; // Tupp took since "now" (accumulated)
     let cumulativeReturned = 0; // Tupp returned since "now"
 
     const handleManualReturn = async (userId: string, currentBalance: number) => {
         if (currentBalance <= 0) return;
-        const res = await manualDecrementAction(userId);
-        if (res.success) {
-            notifications.show({ title: 'Kudos', message: 'Tupperware rendu manuellement', color: 'green' });
-        } else {
-            notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+        setLoadingId(userId);
+        try {
+            const res = await manualDecrementAction(userId);
+            if (res.success) {
+                notifications.show({ title: 'Kudos', message: 'Tupperware rendu manuellement', color: 'green' });
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } catch (e) {
+            notifications.show({ title: 'Erreur', message: 'Une erreur est survenue', color: 'red' });
+        } finally {
+            setLoadingId(null);
         }
     };
 
@@ -124,7 +133,13 @@ export default function ContainersClient({ debtors, menus, totalStock, currentOu
                                         <Table.Td>{u.email}</Table.Td>
                                         <Table.Td><Badge size="lg" circle>{u.containerBalance}</Badge></Table.Td>
                                         <Table.Td>
-                                            <Button size="xs" variant="light" color="blue" onClick={() => handleManualReturn(u.id, u.containerBalance)}>
+                                            <Button
+                                                size="xs"
+                                                variant="light"
+                                                color="blue"
+                                                onClick={() => handleManualReturn(u.id, u.containerBalance)}
+                                                loading={loadingId === u.id}
+                                            >
                                                 Rendu manuel (-1)
                                             </Button>
                                         </Table.Td>
