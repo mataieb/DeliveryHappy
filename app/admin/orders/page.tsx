@@ -26,8 +26,12 @@ export default async function AdminOrdersPage() {
                                 include: { options: true }
                             }
                         }
-                    }
+                    },
+                    itemRating: true,
                 }
+            },
+            review: {
+                include: { itemRatings: true }
             }
         }
     });

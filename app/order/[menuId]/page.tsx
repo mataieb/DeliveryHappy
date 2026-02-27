@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect, notFound } from "next/navigation";
 import OrderClient from "./OrderClient";
 import { getAllSettingsAction } from "@/app/admin/settings/actions";
+import { isOrderingOpen, orderingDeadline } from "@/lib/ordering";
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +37,9 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
     if (!menu) notFound();
     if (!user) redirect("/api/auth/signin");
 
+    const orderingOpen = isOrderingOpen(menu.date);
+    const deadline = orderingDeadline(menu.date);
+
     // @ts-ignore
     const currentBalance = user.containerBalance || 0;
 
@@ -66,5 +70,7 @@ export default async function OrderPage({ params }: { params: Promise<{ menuId: 
         containerBalance={projectedBalance}
         userPhoneNumber={user.phoneNumber}
         tupperwareEnabled={settings.tupperwareEnabled}
+        orderingOpen={orderingOpen}
+        orderingDeadline={deadline}
     />;
 }

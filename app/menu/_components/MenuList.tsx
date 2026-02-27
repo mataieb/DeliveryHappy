@@ -1,12 +1,13 @@
 "use client";
 
 import { Menu, MenuItem, DietaryOption } from "@prisma/client";
-import { Tabs, SimpleGrid, Text, Group, Button, Badge } from "@mantine/core";
+import { Tabs, SimpleGrid, Text, Group, Button, Badge, Tooltip } from "@mantine/core";
 import Link from "next/link";
 import dayjs from "dayjs";
 import 'dayjs/locale/fr';
 import { useState } from "react";
 import MenuItemCard from "./MenuItemCard";
+import { isOrderingOpen, orderingDeadline } from "@/lib/ordering";
 
 interface MenuListProps {
     menus: (Menu & { items: MenuItem[] })[];
@@ -31,6 +32,8 @@ export default function MenuList({ menus }: MenuListProps) {
         return dayjs(date).isBefore(dayjs().startOf('day'));
     };
 
+    const canOrder = (date: Date) => !isPastDate(date) && isOrderingOpen(date);
+
     return (
         <>
             <Tabs value={activeTab} onChange={setActiveTab}>
@@ -54,20 +57,27 @@ export default function MenuList({ menus }: MenuListProps) {
                 {menus.map((menu) => {
                     const filteredItems = filterItems(menu.items);
                     const isPast = isPastDate(menu.date);
+                    const open = canOrder(menu.date);
+                    const deadline = orderingDeadline(menu.date);
 
                     return (
                         <Tabs.Panel key={menu.id} value={menu.id}>
                             <Group justify="flex-end" mb="md">
-                                <Button
-                                    component={isPast ? 'button' : (Link as any)}
-                                    href={isPast ? undefined : `/order/${menu.id}`}
-                                    size="md"
-                                    variant="gradient"
-                                    gradient={{ from: 'blue', to: 'cyan' }}
-                                    disabled={isPast}
+                                <Tooltip
+                                    label={open ? `Commandez avant le ${deadline}` : isPast ? 'Menu passé' : `Commandes fermées depuis le ${deadline}`}
+                                    withArrow
                                 >
-                                    {isPast ? 'Menu expiré' : 'Commander ce Menu'}
-                                </Button>
+                                    <Button
+                                        component={open ? (Link as any) : 'button'}
+                                        href={open ? `/order/${menu.id}` : undefined}
+                                        size="md"
+                                        variant="gradient"
+                                        gradient={{ from: 'blue', to: 'cyan' }}
+                                        disabled={!open}
+                                    >
+                                        {isPast ? 'Menu passé' : open ? 'Commander ce Menu' : 'Commandes fermées'}
+                                    </Button>
+                                </Tooltip>
                             </Group>
                             {filteredItems.length === 0 ? (
                                 <Text c="dimmed">Aucun plat disponible pour ce jour.</Text>

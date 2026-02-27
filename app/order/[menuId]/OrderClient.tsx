@@ -41,6 +41,8 @@ type Props = {
     containerBalance: number;
     userPhoneNumber: string | null;
     tupperwareEnabled: boolean;
+    orderingOpen: boolean;
+    orderingDeadline: string;
 }; // @ts-ignore
 
 const DIETARY_LABELS: Record<string, string> = {
@@ -52,7 +54,7 @@ const DIETARY_LABELS: Record<string, string> = {
 };
 
 // @ts-ignore
-export default function OrderClient({ menu, addresses, containerBalance, userPhoneNumber, tupperwareEnabled }: Props) {
+export default function OrderClient({ menu, addresses, containerBalance, userPhoneNumber, tupperwareEnabled, orderingOpen, orderingDeadline }: Props) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -174,6 +176,21 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
     return (
         <Container size="sm" py="xl">
             <Title mb="lg">Finaliser ma commande du {dayjs(menu.date).format('DD/MM/YYYY')}</Title>
+
+            {!orderingOpen && (
+                <Alert
+                    icon={<IconAlertCircle size={20} />}
+                    title="Commandes fermées"
+                    color="red"
+                    variant="filled"
+                    mb="xl"
+                >
+                    <Text size="sm">
+                        Les commandes pour ce menu étaient ouvertes jusqu&apos;au <strong>{orderingDeadline}</strong>.
+                        Il n&apos;est plus possible de commander ce menu.
+                    </Text>
+                </Alert>
+            )}
 
             <form onSubmit={form.onSubmit(handleSubmit)}>
                 <Stack gap="xl">
@@ -423,8 +440,8 @@ export default function OrderClient({ menu, addresses, containerBalance, userPho
                         <Text size="sm" c="dimmed" mt="xs" ta="center">Règlement sur place en wero, lydia ou cash</Text>
                     </Card>
 
-                    <Button size="lg" type="submit" loading={loading} disabled={addresses.length === 0}>
-                        Valider la commande
+                    <Button size="lg" type="submit" loading={loading} disabled={addresses.length === 0 || !orderingOpen}>
+                        {orderingOpen ? 'Valider la commande' : 'Commandes fermées'}
                     </Button>
                 </Stack >
             </form >

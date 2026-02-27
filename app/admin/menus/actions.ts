@@ -202,3 +202,71 @@ export async function updateMenuAction(id: string, date: Date, items: MenuItemIn
         return { success: false, error: "Une erreur est survenue lors de la mise à jour du menu." };
     }
 }
+
+export async function copyMenuAction(sourceMenuId: string, targetDate: Date) {
+    try {
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        // Check no menu already exists on target date
+        const existing = await prisma.menu.count({ where: { date: startOfDay } });
+        if (existing > 0) {
+            return { success: false, error: "Un menu existe déjà pour cette date." };
+        }
+
+        // Fetch source menu with all nested data
+        const source = await prisma.menu.findUnique({
+            where: { id: sourceMenuId },
+            include: {
+                items: {
+                    include: {
+                        optionGroups: {
+                            include: { options: true }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!source) return { success: false, error: "Menu source introuvable." };
+
+        // Deep-clone to new date — completely new records, no link to original
+        await prisma.menu.create({
+            data: {
+                date: startOfDay,
+                items: {
+                    create: source.items.map(item => ({
+                        name: item.name,
+                        description: item.description,
+                        ingredients: item.ingredients,
+                        price: item.price,
+                        category: item.category,
+                        dietaryOptions: item.dietaryOptions,
+                        spiceLevel: item.spiceLevel,
+                        optionGroups: {
+                            create: item.optionGroups.map(group => ({
+                                name: group.name,
+                                isRequired: group.isRequired,
+                                allowMultiple: group.allowMultiple,
+                                maxOptions: group.maxOptions,
+                                options: {
+                                    create: group.options.map(opt => ({
+                                        name: opt.name,
+                                        description: opt.description,
+                                        price: opt.price,
+                                    }))
+                                }
+                            }))
+                        }
+                    }))
+                }
+            }
+        });
+
+        revalidatePath('/admin/menus');
+        return { success: true };
+    } catch (error) {
+        console.error("Error copying menu:", error);
+        return { success: false, error: "Une erreur est survenue lors de la copie du menu." };
+    }
+}

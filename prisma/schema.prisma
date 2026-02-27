@@ -155,6 +155,7 @@ model Order {
   packaging       Packaging   @default(CARDBOARD)
   isReturningContainer Boolean @default(false)
   containersReturnedCount Int @default(0)
+  review          OrderReview?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 }
@@ -181,6 +182,27 @@ model OrderItem {
   itemId    String
   selectedOption String? // Deprecated or simple Note?
   selectedOptions Json?   // Stores complex selections { [groupId]: [optionId, optionId] }
+  itemRating      OrderItemRating?
+}
+
+// Review models
+model OrderReview {
+  id        String   @id @default(cuid())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String   @unique
+  comment   String?  // Free comment, optional
+  itemRatings OrderItemRating[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderItemRating {
+  id          String      @id @default(cuid())
+  review      OrderReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId    String
+  orderItem   OrderItem   @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItemId String      @unique
+  rating      Int         // 1 to 5
 }
 
 // Global app settings stored as key-value pairs

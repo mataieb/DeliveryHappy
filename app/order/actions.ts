@@ -23,6 +23,15 @@ export async function createOrderAction(menuId: string, items: OrderedItem[], de
         const menu = await prisma.menu.findUnique({ where: { id: menuId } });
         if (!menu) return { success: false, error: "Menu introuvable" };
 
+        // Check ordering deadline: orders close at 21:00 the day before
+        const { isOrderingOpen, orderingDeadline } = await import('@/lib/ordering');
+        if (!isOrderingOpen(menu.date)) {
+            return {
+                success: false,
+                error: `Les commandes pour ce menu sont fermées depuis le ${orderingDeadline(menu.date)}.`
+            };
+        }
+
         // Stock Validation
         if (packaging === 'TUPPERWARE') {
             const totalStock = 45;
