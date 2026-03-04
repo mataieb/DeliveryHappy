@@ -3,6 +3,7 @@ import { Outfit } from "next/font/google"; // Premium typography
 import { ColorSchemeScript } from "@mantine/core";
 import { Providers } from "./providers";
 import { UserNav } from "./_components/UserNav";
+import { FloatingCart } from "./_components/FloatingCart";
 import "@mantine/core/styles.css";
 import "@mantine/dates/styles.css";
 import "@mantine/notifications/styles.css";
@@ -31,6 +32,7 @@ export default function RootLayout({
         <Providers fontFamily={outfit.style.fontFamily}>
           <UserNav />
           {children}
+          <FloatingCart />
         </Providers>
       </body>
     </html>

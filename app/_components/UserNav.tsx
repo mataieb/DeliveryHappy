@@ -4,7 +4,10 @@ import { Group, Button, Container } from "@mantine/core";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboard, IconUser, IconLogout, IconTruck, IconPackage } from "@tabler/icons-react";
+import {
+    IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboard,
+    IconUser, IconLogout, IconTruck, IconPackage
+} from "@tabler/icons-react";
 
 export function UserNav() {
     const pathname = usePathname();
@@ -95,6 +98,7 @@ export function UserNav() {
                                     Back Office
                                 </Button>
                             )}
+
                             {isAuthenticated && (
                                 <Button
                                     variant="light"

@@ -1,9 +1,38 @@
-"use client"
+"use client";
+
 import { MenuItem as MenuItemType, ItemCategory, DietaryOption } from "@prisma/client";
 import { Card, Text, Badge, Button, Group, rem } from "@mantine/core";
-import { IconLeaf, IconMeat, IconCheese, IconPepper, IconDisabled } from "@tabler/icons-react";
+import { IconLeaf, IconPepper, IconDisabled, IconShoppingCartPlus } from "@tabler/icons-react";
 
-export default function MenuItemCard({ item }: { item: MenuItemType }) {
+// Extended type with optionGroups
+type OptionItem = {
+    id: string;
+    name: string;
+    description: string | null;
+    price: number;
+    groupId: string;
+};
+
+type OptionGroup = {
+    id: string;
+    name: string;
+    isRequired: boolean;
+    allowMultiple: boolean;
+    maxOptions: number | null;
+    options: OptionItem[];
+};
+
+export type MenuItemWithOptions = MenuItemType & {
+    optionGroups: OptionGroup[];
+};
+
+interface MenuItemCardProps {
+    item: MenuItemWithOptions;
+    onAdd?: (item: MenuItemWithOptions) => void;
+    canOrder?: boolean;
+}
+
+export default function MenuItemCard({ item, onAdd, canOrder = true }: MenuItemCardProps) {
 
     const getBadgeColor = (cat: ItemCategory) => {
         switch (cat) {
@@ -13,7 +42,7 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
             case 'DRINK': return 'yellow';
             default: return 'gray';
         }
-    }
+    };
 
     const getCategoryLabel = (cat: ItemCategory) => {
         switch (cat) {
@@ -23,7 +52,7 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
             case 'DRINK': return 'Boisson';
             default: return cat;
         }
-    }
+    };
 
     const getDietaryIcon = (option: DietaryOption) => {
         const style = { width: rem(16), height: rem(16) };
@@ -35,7 +64,7 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
             case 'HALAL': return <Text size="xs" fw={700}>H</Text>;
             default: return null;
         }
-    }
+    };
 
     const getDietaryLabel = (option: DietaryOption) => {
         switch (option) {
@@ -46,7 +75,7 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
             case 'HALAL': return 'Halal';
             default: return option;
         }
-    }
+    };
 
     const getDietaryColor = (option: DietaryOption) => {
         switch (option) {
@@ -57,10 +86,12 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
             case 'HALAL': return 'grape';
             default: return 'gray';
         }
-    }
+    };
+
+    const hasOptions = item.optionGroups && item.optionGroups.length > 0;
 
     return (
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
+        <Card shadow="sm" padding="lg" radius="md" withBorder style={{ display: 'flex', flexDirection: 'column' }}>
             <Group justify="space-between" mt="md" mb="xs">
                 <Text fw={500}>{item.name}</Text>
                 <Badge color={getBadgeColor(item.category)}>{getCategoryLabel(item.category)}</Badge>
@@ -82,13 +113,30 @@ export default function MenuItemCard({ item }: { item: MenuItemType }) {
                 </Group>
             )}
 
-            <Text size="sm" c="dimmed" style={{ minHeight: 40, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <Text size="sm" c="dimmed" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {item.description}
             </Text>
 
-            <Group justify="space-between" mt="md">
+            {hasOptions && (
+                <Text size="xs" c="dimmed" mt="xs" fs="italic">
+                    🔧 Options disponibles
+                </Text>
+            )}
+
+            <Group justify="space-between" mt="md" align="center">
                 <Text fw={700} size="lg">{item.price.toFixed(2)} €</Text>
+                {onAdd && canOrder && (
+                    <Button
+                        size="xs"
+                        variant="light"
+                        color="indigo"
+                        leftSection={<IconShoppingCartPlus size={14} />}
+                        onClick={() => onAdd(item)}
+                    >
+                        Ajouter
+                    </Button>
+                )}
             </Group>
         </Card>
-    )
+    );
 }

@@ -1,11 +1,10 @@
-import { Container, Title, Text, Group, Button } from "@mantine/core";
+import { Container, Title } from "@mantine/core";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import dayjs from "dayjs";
 import MenuList from "./_components/MenuList";
-import Link from "next/link";
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +36,13 @@ export default async function MenuPage() {
             }
         },
         include: {
-            items: true
+            items: {
+                include: {
+                    optionGroups: {
+                        include: { options: true }
+                    }
+                }
+            }
         },
         orderBy: {
             date: 'asc'
@@ -46,9 +51,7 @@ export default async function MenuPage() {
 
     return (
         <Container size="lg" py="xl">
-            <Group justify="space-between" mb="xl">
-                <Title>Menu de la semaine</Title>
-            </Group>
+            <Title mb="xl">Menu de la semaine</Title>
             <MenuList menus={menus} />
         </Container>
     );
