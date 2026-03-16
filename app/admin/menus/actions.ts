@@ -3,6 +3,12 @@
 import { prisma } from '@/lib/prisma';
 import { ItemCategory, DietaryOption } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
+import { sendMenuNotificationEmails, sendWeeklyMenuNotificationEmails } from '@/lib/email';
+import dayjs from 'dayjs';
+import 'dayjs/locale/fr';
+
 
 export type OptionItemInput = {
     id?: string;
@@ -268,5 +274,123 @@ export async function copyMenuAction(sourceMenuId: string, targetDate: Date) {
     } catch (error) {
         console.error("Error copying menu:", error);
         return { success: false, error: "Une erreur est survenue lors de la copie du menu." };
+    }
+}
+
+export async function sendMenuNotificationAction(menuId: string) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || session.user.role !== 'ADMIN') {
+        return { success: false, error: 'Accès non autorisé.' };
+    }
+
+    try {
+        // Fetch menu with items
+        const menu = await prisma.menu.findUnique({
+            where: { id: menuId },
+            include: { items: true },
+        });
+        if (!menu) return { success: false, error: 'Menu introuvable.' };
+
+        // Fetch all users with an email
+        const users = await prisma.user.findMany({
+            where: { email: { not: undefined } },
+            select: { email: true, name: true },
+        });
+
+        const menuDate = dayjs(menu.date).locale('fr').format('dddd D MMMM YYYY');
+
+        const result = await sendMenuNotificationEmails(
+            menuDate,
+            menu.items.map(i => ({
+                name: i.name,
+                price: i.price,
+                category: i.category,
+                description: i.description,
+            })),
+            users.map(u => ({ email: u.email!, name: u.name }))
+        );
+
+        return result;
+    } catch (error) {
+        console.error('[sendMenuNotification] Error:', error);
+        return { success: false, error: 'Erreur serveur lors de la notification.' };
+    }
+}
+
+export async function sendWeeklyMenuNotificationAction(menuIds: string[]) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || session.user.role !== 'ADMIN') {
+        return { success: false, error: 'Accès non autorisé.' };
+    }
+
+    try {
+        const menus = await prisma.menu.findMany({
+            where: { id: { in: menuIds } },
+            include: { items: true },
+            orderBy: { date: 'asc' },
+        });
+
+        if (menus.length === 0) {
+            return { success: false, error: 'Aucun menu trouvé pour cette semaine.' };
+        }
+
+        const users = await prisma.user.findMany({
+            where: { email: { not: undefined } },
+            select: { email: true, name: true },
+        });
+
+        const weekStart = dayjs(menus[0].date).locale('fr').format('D MMMM');
+        const weekEnd = dayjs(menus[menus.length - 1].date).locale('fr').format('D MMMM YYYY');
+        const weekLabel = `du ${weekStart} au ${weekEnd}`;
+
+        const days = menus.map(m => ({
+            date: dayjs(m.date).locale('fr').format('dddd D MMMM'),
+            dayShort: dayjs(m.date).locale('fr').format('ddd'),
+            items: m.items.map(i => ({
+                name: i.name,
+                price: i.price,
+                category: i.category,
+                description: i.description,
+            })),
+        }));
+
+        const result = await sendWeeklyMenuNotificationEmails(
+            weekLabel,
+            days,
+            users.map(u => ({ email: u.email!, name: u.name }))
+        );
+
+        return result;
+    } catch (error) {
+        console.error('[sendWeeklyMenu] Error:', error);
+        return { success: false, error: 'Erreur serveur lors de la notification hebdomadaire.' };
+    }
+}
+
+/**
+ * Verrouille ou déverrouille manuellement les commandes pour un menu.
+ * Quand locked=true, aucune nouvelle commande ne peut être passée,
+ * même si la deadline automatique n'est pas encore atteinte.
+ */
+export async function setMenuLockedAction(menuId: string, locked: boolean) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id || session.user.role !== 'ADMIN') {
+        return { success: false, error: 'Accès non autorisé.' };
+    }
+
+    try {
+        // @ts-ignore — locked sera disponible après prisma db push
+        await prisma.menu.update({
+            where: { id: menuId },
+            data: { locked },
+        });
+
+        revalidatePath('/admin/orders');
+        revalidatePath('/admin/menus');
+        revalidatePath('/menu');
+        return { success: true, locked };
+    } catch (error) {
+        console.error('[setMenuLocked] Error:', error);
+        return { success: false, error: 'Erreur lors du verrouillage du menu.' };
     }
 }

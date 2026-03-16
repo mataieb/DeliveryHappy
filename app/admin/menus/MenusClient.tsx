@@ -23,17 +23,19 @@ import {
     Tooltip,
     ThemeIcon,
     Alert,
+    Accordion,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import {
     IconPlus, IconTrash, IconPencil, IconCopy,
-    IconCalendarEvent, IconCalendarStats, IconAlertCircle
+    IconCalendarEvent, IconCalendarStats, IconAlertCircle, IconMailForward, IconCalendarWeek
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import {
     createMenuAction, updateMenuAction, deleteMenuAction, copyMenuAction,
+    sendMenuNotificationAction, sendWeeklyMenuNotificationAction,
     MenuItemInput, OptionGroupInput, OptionItemInput
 } from './actions';
 import dayjs from 'dayjs';
@@ -203,6 +205,35 @@ function MenuCard({
     onDelete: (id: string) => void;
     onCopy: (m: MenuWithItems) => void;
 }) {
+    const [notifying, setNotifying] = useState(false);
+
+    const handleNotify = async () => {
+        if (!confirm(
+            `Envoyer une notification par email à tous les utilisateurs pour le menu du ${dayjs(menu.date).locale('fr').format('D MMMM YYYY')} ?`
+        )) return;
+        setNotifying(true);
+        try {
+            const res = await sendMenuNotificationAction(menu.id);
+            if (res.success) {
+                const isTest = (res as any).testMode;
+                notifications.show({
+                    title: isTest ? '🧪 Email test envoyé' : '📧 Emails envoyés !',
+                    message: isTest
+                        ? `Email de test envoyé à ${(res as any).testRecipient}. Configurez RESEND_TEST_RECIPIENT='' et un domaine vérifié pour envoyer à tous les users.`
+                        : `${(res as any).sent} utilisateur(s) notifié(s).`,
+                    color: isTest ? 'yellow' : 'green',
+                    autoClose: isTest ? 8000 : 4000,
+                });
+            } else {
+                notifications.show({ title: 'Erreur', message: (res as any).error, color: 'red' });
+            }
+        } catch {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'envoi.', color: 'red' });
+        } finally {
+            setNotifying(false);
+        }
+    };
+
     return (
         <Card
             withBorder
@@ -233,6 +264,18 @@ function MenuCard({
                         <Badge variant="light" color={isPast ? 'gray' : 'blue'}>
                             {menu.items.length} plat{menu.items.length > 1 ? 's' : ''}
                         </Badge>
+                        {!isPast && (
+                            <Tooltip label="Notifier les utilisateurs par email" withArrow>
+                                <ActionIcon
+                                    variant="subtle"
+                                    color="indigo"
+                                    onClick={handleNotify}
+                                    loading={notifying}
+                                >
+                                    <IconMailForward size="1rem" />
+                                </ActionIcon>
+                            </Tooltip>
+                        )}
                         <Tooltip label="Dupliquer vers une autre date" withArrow>
                             <ActionIcon variant="subtle" color="teal" onClick={() => onCopy(menu)}>
                                 <IconCopy size="1rem" />
@@ -306,14 +349,54 @@ function MenuCard({
 export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
     const [opened, { open, close }] = useDisclosure(false);
     const [loading, setLoading] = useState(false);
+    const [weeklyNotifying, setWeeklyNotifying] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [copySource, setCopySource] = useState<MenuWithItems | null>(null);
     const [copyOpened, { open: openCopy, close: closeCopy }] = useDisclosure(false);
 
-    // ─ Separate future/past menus ─
+    const handleWeeklyNotify = async (menuIds: string[]) => {
+        if (!confirm('Envoyer le récapitulatif de cette semaine à tous les utilisateurs ?')) return;
+        setWeeklyNotifying(true);
+        try {
+            const res = await sendWeeklyMenuNotificationAction(menuIds);
+            if (res.success) {
+                const isTest = (res as any).testMode;
+                notifications.show({
+                    title: isTest ? '🧪 Email test envoyé' : '📧 Récap semaine envoyé !',
+                    message: isTest
+                        ? `Email de test envoyé à ${(res as any).testRecipient}.`
+                        : `${(res as any).sent} utilisateur(s) notifié(s).`,
+                    color: isTest ? 'yellow' : 'green',
+                    autoClose: isTest ? 8000 : 4000,
+                });
+            } else {
+                notifications.show({ title: 'Erreur', message: (res as any).error, color: 'red' });
+            }
+        } catch {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'envoi.', color: 'red' });
+        } finally {
+            setWeeklyNotifying(false);
+        }
+    };
+
+    // ─ Group menus by week (Monday = start) ─
     const today = dayjs().startOf('day');
-    const upcomingMenus = menus.filter(m => dayjs(m.date).isSame(today, 'day') || dayjs(m.date).isAfter(today));
-    const pastMenus = menus.filter(m => dayjs(m.date).isBefore(today));
+    const currentWeekKey = today.startOf('week').add(1, 'day').format('YYYY-MM-DD');
+
+    type WeekGroup = { weekKey: string; weekStart: ReturnType<typeof dayjs>; menus: MenuWithItems[] };
+    const weekGroupMap: Record<string, WeekGroup> = {};
+    for (const menu of menus) {
+        const monday = dayjs(menu.date).startOf('week').add(1, 'day');
+        const key = monday.format('YYYY-MM-DD');
+        if (!weekGroupMap[key]) weekGroupMap[key] = { weekKey: key, weekStart: monday, menus: [] };
+        weekGroupMap[key].menus.push(menu);
+    }
+    // A week is "past" if its Sunday is before today
+    const isWeekPast = (wg: WeekGroup) => wg.weekStart.add(6, 'day').isBefore(today);
+
+    const weekGroups = Object.values(weekGroupMap).sort((a, b) =>
+        b.weekStart.valueOf() - a.weekStart.valueOf() // descending: future first, past last
+    );
 
     const form = useForm({
         initialValues: {
@@ -549,69 +632,75 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
             {menus.length === 0 ? (
                 <Text c="dimmed">Aucun menu pour le moment.</Text>
             ) : (
-                <Stack gap="xl">
-                    {/* ── Upcoming menus ── */}
-                    <Box>
-                        <Group gap="xs" mb="md">
-                            <ThemeIcon color="blue" variant="light" radius="xl">
-                                <IconCalendarEvent size={16} />
-                            </ThemeIcon>
-                            <Title order={4} c="blue">Menus à venir</Title>
-                            <Badge color="blue" variant="light">{upcomingMenus.length}</Badge>
-                        </Group>
+                <Accordion
+                    defaultValue={currentWeekKey}
+                    variant="separated"
+                    radius="md"
+                >
+                    {weekGroups.map(wg => {
+                        const past = isWeekPast(wg);
+                        const weekEnd = wg.weekStart.add(4, 'day'); // vendredi
+                        const weekLabel = `${wg.weekStart.locale('fr').format('D MMMM')} – ${weekEnd.locale('fr').format('D MMMM YYYY')}`;
+                        const menuIds = wg.menus.map(m => m.id);
 
-                        {upcomingMenus.length === 0 ? (
-                            <Text c="dimmed" fs="italic" size="sm">
-                                Aucun menu à venir. Créez-en un avec le bouton ci-dessus !
-                            </Text>
-                        ) : (
-                            <Grid>
-                                {upcomingMenus.map(menu => (
-                                    <Grid.Col key={menu.id} span={{ base: 12, md: 6, lg: 4 }}>
-                                        <MenuCard
-                                            menu={menu}
-                                            isPast={false}
-                                            onEdit={handleEdit}
-                                            onDelete={handleDelete}
-                                            onCopy={handleCopyOpen}
-                                        />
-                                    </Grid.Col>
-                                ))}
-                            </Grid>
-                        )}
-                    </Box>
+                        return (
+                            <Accordion.Item key={wg.weekKey} value={wg.weekKey}>
+                                <Accordion.Control>
+                                    <Group justify="space-between" wrap="nowrap" pr="sm">
+                                        <Group gap="sm">
+                                            <ThemeIcon
+                                                size="sm"
+                                                color={past ? 'gray' : wg.weekKey === currentWeekKey ? 'blue' : 'teal'}
+                                                variant="light"
+                                                radius="xl"
+                                            >
+                                                {past ? <IconCalendarStats size={12} /> : <IconCalendarEvent size={12} />}
+                                            </ThemeIcon>
+                                            <Text fw={600} c={past ? 'dimmed' : undefined} tt="capitalize">
+                                                Semaine du {weekLabel}
+                                            </Text>
+                                            {wg.weekKey === currentWeekKey && (
+                                                <Badge color="blue" variant="filled" size="xs">Cette semaine</Badge>
+                                            )}
+                                            <Badge color={past ? 'gray' : 'blue'} variant="light" size="sm">
+                                                {wg.menus.length} menu{wg.menus.length > 1 ? 's' : ''}
+                                            </Badge>
+                                        </Group>
 
-                    <Divider />
+                                        {!past && (
+                                            <Button
+                                                size="xs"
+                                                variant="light"
+                                                color="indigo"
+                                                leftSection={<IconCalendarWeek size={13} />}
+                                                loading={weeklyNotifying}
+                                                onClick={e => { e.stopPropagation(); handleWeeklyNotify(menuIds); }}
+                                            >
+                                                Notifier
+                                            </Button>
+                                        )}
+                                    </Group>
+                                </Accordion.Control>
 
-                    {/* ── Past menus ── */}
-                    <Box>
-                        <Group gap="xs" mb="md">
-                            <ThemeIcon color="gray" variant="light" radius="xl">
-                                <IconCalendarStats size={16} />
-                            </ThemeIcon>
-                            <Title order={4} c="dimmed">Menus passés</Title>
-                            <Badge color="gray" variant="light">{pastMenus.length}</Badge>
-                        </Group>
-
-                        {pastMenus.length === 0 ? (
-                            <Text c="dimmed" fs="italic" size="sm">Aucun menu passé.</Text>
-                        ) : (
-                            <Grid>
-                                {pastMenus.map(menu => (
-                                    <Grid.Col key={menu.id} span={{ base: 12, md: 6, lg: 4 }}>
-                                        <MenuCard
-                                            menu={menu}
-                                            isPast={true}
-                                            onEdit={handleEdit}
-                                            onDelete={handleDelete}
-                                            onCopy={handleCopyOpen}
-                                        />
-                                    </Grid.Col>
-                                ))}
-                            </Grid>
-                        )}
-                    </Box>
-                </Stack>
+                                <Accordion.Panel>
+                                    <Grid pt="xs">
+                                        {wg.menus.map(menu => (
+                                            <Grid.Col key={menu.id} span={{ base: 12, md: 6, lg: 4 }}>
+                                                <MenuCard
+                                                    menu={menu}
+                                                    isPast={dayjs(menu.date).isBefore(today)}
+                                                    onEdit={handleEdit}
+                                                    onDelete={handleDelete}
+                                                    onCopy={handleCopyOpen}
+                                                />
+                                            </Grid.Col>
+                                        ))}
+                                    </Grid>
+                                </Accordion.Panel>
+                            </Accordion.Item>
+                        );
+                    })}
+                </Accordion>
             )}
 
             {/* ── Create / Edit modal ── */}

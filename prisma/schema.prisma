@@ -82,6 +82,7 @@ model VerificationToken {
 model Menu {
   id        String     @id @default(cuid())
   date      DateTime   @unique
+  locked    Boolean    @default(false) // Manuel admin override
   items     MenuItem[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt

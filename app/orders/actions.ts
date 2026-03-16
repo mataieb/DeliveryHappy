@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { isOrderingOpen } from "@/lib/ordering";
 
 export type ItemRatingInput = {
     orderItemId: string;
@@ -57,5 +58,55 @@ export async function submitOrderReviewAction(
     } catch (e) {
         console.error(e);
         return { success: false, error: "Erreur lors de l'enregistrement de l'avis" };
+    }
+}
+
+/**
+ * Annule une commande par l'utilisateur lui-même.
+ * Conditions :
+ *  - La commande appartient à l'utilisateur connecté
+ *  - Le statut est PENDING (pas encore en cuisine)
+ *  - La deadline de commande n'est pas encore passée
+ */
+export async function cancelOrderAction(orderId: string) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return { success: false, error: "Vous devez être connecté" };
+
+    const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { menu: { select: { date: true } } }
+    });
+
+    if (!order) return { success: false, error: "Commande introuvable" };
+    if (order.userId !== session.user.id) return { success: false, error: "Non autorisé" };
+
+    // Seules les commandes PENDING peuvent être annulées par l'utilisateur
+    if (order.status !== 'PENDING') {
+        return {
+            success: false,
+            error: "Seules les commandes en attente peuvent être annulées. Contactez le service pour toute autre demande."
+        };
+    }
+
+    // Vérifie que la deadline n'est pas passée
+    if (!isOrderingOpen(order.menu.date)) {
+        return {
+            success: false,
+            error: "La deadline de commande est passée, il n'est plus possible d'annuler."
+        };
+    }
+
+    try {
+        await prisma.order.update({
+            where: { id: orderId },
+            data: { status: 'CANCELLED' }
+        });
+
+        revalidatePath('/orders');
+        revalidatePath('/admin/orders');
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { success: false, error: "Erreur lors de l'annulation" };
     }
 }

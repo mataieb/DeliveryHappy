@@ -9,7 +9,8 @@ import { notifications } from "@mantine/notifications";
 import dayjs from "dayjs";
 import 'dayjs/locale/fr';
 import { updateOrderStatusAction } from "./actions";
-import { IconStarFilled, IconStar, IconMessageCircle, IconChartBar } from "@tabler/icons-react";
+import { setMenuLockedAction } from "../menus/actions";
+import { IconStarFilled, IconStar, IconMessageCircle, IconChartBar, IconLock, IconLockOpen } from "@tabler/icons-react";
 
 type Order = any;
 
@@ -299,6 +300,7 @@ function ReviewsSummaryCard({
 export function OrdersClient({ orders }: { orders: Order[] }) {
     const [filter, setFilter] = useState<string>('ALL');
     const [loading, setLoading] = useState<string | null>(null);
+    const [lockLoading, setLockLoading] = useState<string | null>(null); // menuId being locked
     const [confirmModal, setConfirmModal] = useState({ opened: false, orderId: '', userName: '', returnedCount: 1 });
 
     const filteredOrders = orders.filter(order => {
@@ -317,6 +319,26 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
             }
         } finally {
             setLoading(null);
+        }
+    };
+
+    const handleToggleLock = async (menuId: string, currentlyLocked: boolean) => {
+        setLockLoading(menuId);
+        try {
+            const res = await setMenuLockedAction(menuId, !currentlyLocked);
+            if (res.success) {
+                notifications.show({
+                    title: !currentlyLocked ? 'Commandes bloquées' : 'Commandes rouvertes',
+                    message: !currentlyLocked
+                        ? 'Les nouvelles commandes sont désormais bloquées pour ce jour.'
+                        : 'Les commandes sont à nouveau ouvertes pour ce jour.',
+                    color: !currentlyLocked ? 'orange' : 'green',
+                });
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } finally {
+            setLockLoading(null);
         }
     };
 
@@ -359,13 +381,44 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                         .map(([date, dateOrders]: [string, any[]]) => {
                             const dateLabel = dayjs(date).locale('fr').format('dddd DD MMMM YYYY');
                             const reviewedCount = dateOrders.filter((o: any) => o.review).length;
+                            const menuId: string = dateOrders[0]?.menu?.id;
+                            const isMenuLocked: boolean = !!(dateOrders[0]?.menu as any)?.locked;
 
                             return (
                                 <Accordion.Item key={date} value={date}>
+                                    {/* Lock button row — above accordion control to avoid toggle conflict */}
+                                    <Group justify="space-between" px="md" pt="xs" pb={0}>
+                                        <Text size="xs" c="dimmed" fw={500}>
+                                            {dateLabel}
+                                        </Text>
+                                        <Tooltip
+                                            label={isMenuLocked ? 'Rouvrir les commandes' : 'Bloquer les nouvelles commandes'}
+                                            withArrow
+                                        >
+                                            <Button
+                                                size="xs"
+                                                variant="light"
+                                                color={isMenuLocked ? 'green' : 'orange'}
+                                                leftSection={isMenuLocked ? <IconLockOpen size={14} /> : <IconLock size={14} />}
+                                                loading={lockLoading === menuId}
+                                                onClick={() => handleToggleLock(menuId, isMenuLocked)}
+                                            >
+                                                {isMenuLocked ? 'Rouvrir' : 'Bloquer'}
+                                            </Button>
+                                        </Tooltip>
+                                    </Group>
+
                                     <Accordion.Control>
                                         <div>
                                             <Group justify="space-between" mb="xs">
-                                                <Text fw={600}>{dateLabel}</Text>
+                                                <Group gap="xs">
+                                                    {isMenuLocked && (
+                                                        <Badge color="red" variant="filled" size="sm" leftSection={<IconLock size={10} />}>
+                                                            Bloqué
+                                                        </Badge>
+                                                    )}
+                                                    <Text fw={600}>{dateLabel}</Text>
+                                                </Group>
                                                 <Group gap="xs">
                                                     <Badge color="blue">{dateOrders.length} commande(s)</Badge>
                                                     <Badge color="green">

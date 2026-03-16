@@ -12,7 +12,7 @@ import ItemOptionsModal from "./ItemOptionsModal";
 import { isOrderingOpen, orderingDeadline } from "@/lib/ordering";
 import { useCart } from "@/app/_components/CartContext";
 import { CartItem, generateCartId } from "@/lib/cart";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconLock } from "@tabler/icons-react";
 
 interface MenuListProps {
     menus: (Menu & { items: MenuItemWithOptions[] })[];
@@ -40,7 +40,8 @@ export default function MenuList({ menus }: MenuListProps) {
     }
 
     const isPastDate = (date: Date) => dayjs(date).isBefore(dayjs().startOf('day'));
-    const canOrder = (date: Date) => !isPastDate(date) && isOrderingOpen(date);
+    const isLocked = (menu: MenuListProps['menus'][number]) => !!(menu as any).locked;
+    const canOrder = (date: Date, locked: boolean) => !isPastDate(date) && isOrderingOpen(date) && !locked;
 
     const buildSimpleCartItem = (item: MenuItemWithOptions): CartItem => ({
         cartId: generateCartId(),
@@ -156,7 +157,8 @@ export default function MenuList({ menus }: MenuListProps) {
 
                 {menus.map((menu) => {
                     const isPast = isPastDate(menu.date);
-                    const open = canOrder(menu.date);
+                    const locked = isLocked(menu);
+                    const open = canOrder(menu.date, locked);
                     const deadline = orderingDeadline(menu.date);
                     const menuDateStr = menu.date instanceof Date ? menu.date.toISOString() : String(menu.date);
 
@@ -175,7 +177,20 @@ export default function MenuList({ menus }: MenuListProps) {
                                 )}
                             </Group>
 
-                            {!open && !isPast && (
+                            {/* Alerte : verrou admin */}
+                            {locked && !isPast && (
+                                <Alert
+                                    icon={<IconLock size={16} />}
+                                    color="red"
+                                    variant="light"
+                                    mb="md"
+                                >
+                                    Les commandes pour ce jour ont été <strong>bloquées par l&apos;administrateur</strong>.
+                                </Alert>
+                            )}
+
+                            {/* Alerte : deadline automatique passée */}
+                            {!open && !isPast && !locked && (
                                 <Alert
                                     icon={<IconAlertCircle size={16} />}
                                     color="orange"

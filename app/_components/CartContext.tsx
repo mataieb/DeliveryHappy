@@ -3,7 +3,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
 import { Cart, CartItem, getCart, saveCart, clearCart, cartTotalItems, cartTotalPrice } from '@/lib/cart';
-import { notifications } from '@mantine/notifications';
 
 interface CartContextValue {
     cart: Cart | null;

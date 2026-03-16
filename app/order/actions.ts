@@ -23,6 +23,15 @@ export async function createOrderAction(menuId: string, items: OrderedItem[], de
         const menu = await prisma.menu.findUnique({ where: { id: menuId } });
         if (!menu) return { success: false, error: "Menu introuvable" };
 
+        // Vérifie le verrou manuel admin
+        // @ts-ignore — locked disponible après db push
+        if (menu.locked) {
+            return {
+                success: false,
+                error: "Les commandes pour ce menu ont été fermées par l'administrateur."
+            };
+        }
+
         // Check ordering deadline: orders close at 21:00 the day before
         const { isOrderingOpen, orderingDeadline } = await import('@/lib/ordering');
         if (!isOrderingOpen(menu.date)) {

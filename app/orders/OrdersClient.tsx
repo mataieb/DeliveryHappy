@@ -10,12 +10,16 @@ import {
     Stack,
     Button,
     Tooltip,
+    Modal,
 } from '@mantine/core';
-import { IconStarFilled, IconStarHalfFilled, IconStar } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconX } from '@tabler/icons-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import { useState } from 'react';
 import ReviewModal from './ReviewModal';
+import { cancelOrderAction } from './actions';
+import { notifications } from '@mantine/notifications';
+import { isOrderingOpen } from '@/lib/ordering';
 
 const STATUS_LABELS: Record<string, string> = {
     PENDING: 'En attente',
@@ -86,11 +90,42 @@ function StarDisplay({ rating }: { rating: number }) {
 
 export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) {
     const [reviewOrderId, setReviewOrderId] = useState<string | null>(null);
+    const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
+    const [cancelling, setCancelling] = useState(false);
 
     const activeOrder = reviewOrderId ? orders.find(o => o.id === reviewOrderId) : null;
+    const orderToCancel = cancelOrderId ? orders.find(o => o.id === cancelOrderId) : null;
 
     const canReview = (order: OrderForDisplay) =>
         ['DELIVERED', 'PAID'].includes(order.status) && !order.review;
+
+    // L'utilisateur peut annuler seulement si PENDING et si la deadline n'est pas passée
+    const canCancel = (order: OrderForDisplay) =>
+        order.status === 'PENDING' && isOrderingOpen(new Date(order.menu.date));
+
+    const handleConfirmCancel = async () => {
+        if (!cancelOrderId) return;
+        setCancelling(true);
+        try {
+            const res = await cancelOrderAction(cancelOrderId);
+            if (res.success) {
+                notifications.show({
+                    title: 'Commande annulée',
+                    message: 'Votre commande a bien été annulée.',
+                    color: 'green',
+                });
+            } else {
+                notifications.show({
+                    title: 'Erreur',
+                    message: res.error ?? 'Une erreur est survenue.',
+                    color: 'red',
+                });
+            }
+        } finally {
+            setCancelling(false);
+            setCancelOrderId(null);
+        }
+    };
 
     return (
         <Container size="md" py="xl">
@@ -221,8 +256,26 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
                                 </Card>
                             )}
 
-                            {/* Review button */}
-                            <Group justify="flex-end" mt="md">
+                            {/* Actions: cancel + review */}
+                            <Group justify="space-between" mt="md">
+                                {/* Annulation */}
+                                {canCancel(order) ? (
+                                    <Button
+                                        size="xs"
+                                        variant="subtle"
+                                        color="red"
+                                        leftSection={<IconX size={14} />}
+                                        onClick={() => setCancelOrderId(order.id)}
+                                    >
+                                        Annuler la commande
+                                    </Button>
+                                ) : order.status === 'CANCELLED' ? (
+                                    <Badge color="red" variant="light">Annulée</Badge>
+                                ) : (
+                                    <span />
+                                )}
+
+                                {/* Avis */}
                                 {canReview(order) ? (
                                     <Button
                                         size="xs"
@@ -265,6 +318,46 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
                     }))}
                 />
             )}
+
+            {/* Modale de confirmation d'annulation */}
+            <Modal
+                opened={!!cancelOrderId}
+                onClose={() => setCancelOrderId(null)}
+                title="Annuler la commande ?"
+                centered
+                size="sm"
+            >
+                <Stack gap="md">
+                    <Text size="sm">
+                        Êtes-vous sûr de vouloir annuler votre commande du{' '}
+                        <strong>
+                            {orderToCancel
+                                ? dayjs(orderToCancel.menu.date).locale('fr').format('dddd D MMMM')
+                                : ''}
+                        </strong>{' '}?
+                        <br /><br />
+                        Cette action est <strong>irréversible</strong>.
+                    </Text>
+                    <Group justify="flex-end" gap="sm">
+                        <Button
+                            variant="subtle"
+                            color="gray"
+                            onClick={() => setCancelOrderId(null)}
+                            disabled={cancelling}
+                        >
+                            Garder ma commande
+                        </Button>
+                        <Button
+                            color="red"
+                            leftSection={<IconX size={14} />}
+                            loading={cancelling}
+                            onClick={handleConfirmCancel}
+                        >
+                            Oui, annuler
+                        </Button>
+                    </Group>
+                </Stack>
+            </Modal>
         </Container>
     );
 }
