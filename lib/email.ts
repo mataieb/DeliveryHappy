@@ -120,7 +120,7 @@ export async function sendMenuNotificationEmails(
         const { data, error } = await resend.emails.send({
             from: FROM_EMAIL,
             to: testRecipient,
-            subject: `[TEST] 🍽️ Menu du ${menuDate} — Passez votre commande !`,
+            subject: `🍽️ Menu du ${menuDate} — Passez votre commande !`,
             html,
         });
         if (error) {
@@ -299,7 +299,7 @@ export async function sendWeeklyMenuNotificationEmails(
         const { data, error } = await resend.emails.send({
             from: FROM_EMAIL,
             to: testRecipient,
-            subject: `[TEST] 🗓️ Menus de la semaine — ${weekLabel}`,
+            subject: `🗓️ Menus de la semaine — ${weekLabel}`,
             html,
         });
         if (error) return { success: false, error: `Resend : ${error.message}` };
