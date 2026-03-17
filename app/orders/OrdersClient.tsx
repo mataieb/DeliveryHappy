@@ -137,8 +137,8 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
                 <Stack>
                     {orders.map(order => (
                         <Card key={order.id} withBorder shadow="sm" radius="md">
-                            <Group justify="space-between" mb="xs">
-                                <Group>
+                            <Group justify="space-between" mb="xs" wrap="wrap">
+                                <Group wrap="wrap">
                                     <Text fw={700}>
                                         Commande du {dayjs(order.menu.date).locale('fr').format('DD/MM/YYYY')}
                                     </Text>

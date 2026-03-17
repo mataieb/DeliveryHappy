@@ -272,13 +272,13 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                         description="Provenant de votre compte Google"
                     />
 
-                    <Group align="flex-end">
+                    <Group align="flex-end" wrap="wrap">
                         <TextInput
                             label="Téléphone"
                             placeholder="06 12 34 56 78"
                             value={phoneNumber}
                             onChange={(e) => setPhoneNumber(e.currentTarget.value)}
-                            style={{ flex: 1 }}
+                            style={{ flex: 1, minWidth: 200 }}
                         />
                         <Button
                             onClick={handleSavePhone}

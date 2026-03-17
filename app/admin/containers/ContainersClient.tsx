@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Container, Title, Text, Table, Tabs, Card, Badge, Stack, Grid, Button, Group } from '@mantine/core';
+import { Container, Title, Text, Table, Tabs, Card, Badge, Stack, Grid, Button, Group, ScrollArea } from '@mantine/core';
 import { manualDecrementAction } from './actions';
 import { notifications } from '@mantine/notifications';
 
@@ -66,7 +66,7 @@ export default function ContainersClient({ debtors, menus, totalStock, currentOu
             <Title mb="xl">Gestion des Tupperwares</Title>
 
             <Grid mb="xl">
-                <Grid.Col span={4}>
+                <Grid.Col span={{ base: 12, sm: 4 }}>
                     <Card withBorder padding="xl">
                         <Stack align="center">
                             <Text fw={700}>Stock Total</Text>
@@ -74,7 +74,7 @@ export default function ContainersClient({ debtors, menus, totalStock, currentOu
                         </Stack>
                     </Card>
                 </Grid.Col>
-                <Grid.Col span={4}>
+                <Grid.Col span={{ base: 12, sm: 4 }}>
                     <Card withBorder padding="xl">
                         <Stack align="center">
                             <Text fw={700}>Actuellement Dehors</Text>
@@ -82,7 +82,7 @@ export default function ContainersClient({ debtors, menus, totalStock, currentOu
                         </Stack>
                     </Card>
                 </Grid.Col>
-                <Grid.Col span={4}>
+                <Grid.Col span={{ base: 12, sm: 4 }}>
                     <Card withBorder padding="xl">
                         <Stack align="center">
                             <Text fw={700}>Disponibles (Immédiat)</Text>
@@ -100,6 +100,7 @@ export default function ContainersClient({ debtors, menus, totalStock, currentOu
 
                 <Tabs.Panel value="forecast" pt="xl">
                     <Card withBorder>
+                        <ScrollArea>
                         <Table>
                             <Table.Thead>
                                 <Table.Tr>
@@ -112,11 +113,13 @@ export default function ContainersClient({ debtors, menus, totalStock, currentOu
                             </Table.Thead>
                             <Table.Tbody>{forecastRows}</Table.Tbody>
                         </Table>
+                        </ScrollArea>
                     </Card>
                 </Tabs.Panel>
 
                 <Tabs.Panel value="debtors" pt="xl">
                     <Card withBorder>
+                        <ScrollArea>
                         <Table>
                             <Table.Thead>
                                 <Table.Tr>
@@ -147,6 +150,7 @@ export default function ContainersClient({ debtors, menus, totalStock, currentOu
                                 ))}
                             </Table.Tbody>
                         </Table>
+                        </ScrollArea>
                     </Card>
                 </Tabs.Panel>
             </Tabs>

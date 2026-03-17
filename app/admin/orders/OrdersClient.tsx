@@ -365,7 +365,7 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                         { value: 'PAID', label: 'Livrées et payées' },
                         { value: 'CANCELLED', label: 'Annulées' }
                     ]}
-                    style={{ width: 200 }}
+                    style={{ minWidth: 200 }}
                 />
                 <Text size="sm" c="dimmed" mt="xl">
                     {filteredOrders.length} commande(s)
@@ -519,7 +519,7 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                             {dateOrders.map(order => (
                                                 <Card key={order.id} withBorder shadow="sm" radius="md" p="md">
                                                     <Grid>
-                                                        <Grid.Col span={8}>
+                                                        <Grid.Col span={{ base: 12, md: 8 }}>
                                                             <Stack gap="xs">
                                                                 <Group>
                                                                     <Text fw={600} size="lg">
@@ -636,7 +636,7 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                             </Stack>
                                                         </Grid.Col>
 
-                                                        <Grid.Col span={4}>
+                                                        <Grid.Col span={{ base: 12, md: 4 }}>
                                                             <Stack>
                                                                 <Text size="sm" fw={500}>Changer le statut :</Text>
                                                                 <Stack gap="xs">

@@ -25,10 +25,11 @@ import {
     Alert,
     Accordion,
     ColorSwatch,
+    SimpleGrid,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import {
     IconPlus, IconTrash, IconPencil, IconCopy,
     IconCalendarEvent, IconCalendarStats, IconAlertCircle, IconMailForward, IconCalendarWeek
@@ -364,6 +365,7 @@ function MenuCard({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; zones: ZoneOption[] }) {
+    const isMobile = useMediaQuery('(max-width: 48em)');
     const [opened, { open, close }] = useDisclosure(false);
     const [loading, setLoading] = useState(false);
     const [weeklyNotifying, setWeeklyNotifying] = useState(false);
@@ -724,7 +726,7 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
             )}
 
             {/* ── Create / Edit modal ── */}
-            <Modal opened={opened} onClose={handleClose} title={editingId ? "Modifier le menu" : "Créer un nouveau menu"} size="xl">
+            <Modal opened={opened} onClose={handleClose} title={editingId ? "Modifier le menu" : "Créer un nouveau menu"} size="xl" fullScreen={isMobile}>
                 <form onSubmit={form.onSubmit(handleSubmit)}>
                     <Stack>
                         <DatePickerInput
@@ -755,7 +757,7 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                                 <Stack gap="xs">
                                     <Group align="flex-start" wrap="nowrap">
                                         <Stack gap="xs" style={{ flex: 1 }}>
-                                            <Group grow>
+                                            <SimpleGrid cols={{ base: 1, sm: 2 }}>
                                                 <TextInput
                                                     label="Nom du plat"
                                                     placeholder="Ex: Steak Frites"
@@ -767,7 +769,7 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                                                     allowDeselect={false}
                                                     {...form.getInputProps(`items.${index}.category`)}
                                                 />
-                                            </Group>
+                                            </SimpleGrid>
                                             <TextInput
                                                 label="Description"
                                                 placeholder="Marketing (ex: Délicieux steak...)"
@@ -846,7 +848,7 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                                                         }
                                                         return (
                                                             <Card key={tag} withBorder p="xs" bg="gray.0">
-                                                                <Group align="flex-start" grow>
+                                                                <SimpleGrid cols={{ base: 1, sm: 3 }} style={{ alignItems: 'flex-start' }}>
                                                                     <Badge color="green" mt={4}>
                                                                         {DIETARY_OPTIONS.find(opt => opt.value === tag)?.label || tag}
                                                                     </Badge>
@@ -863,10 +865,9 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                                                                         label="Description (pour ce régime)"
                                                                         placeholder="Ex: Tofu à la place du poulet"
                                                                         size="xs"
-                                                                        style={{ flex: 1 }}
                                                                         {...form.getInputProps(`items.${index}._dietaryConfigs.${tag}.description`)}
                                                                     />
-                                                                </Group>
+                                                                </SimpleGrid>
                                                             </Card>
                                                         );
                                                     })}
