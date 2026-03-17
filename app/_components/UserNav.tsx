@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
     IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboard,
-    IconUser, IconLogout, IconTruck, IconPackage
+    IconUser, IconLogout, IconTruck, IconPackage, IconMapPins
 } from "@tabler/icons-react";
 
 export function UserNav() {
@@ -46,6 +46,9 @@ export function UserNav() {
                             </Button>
                             <Button component={Link} href="/admin/containers" variant={pathname?.startsWith('/admin/containers') ? 'filled' : 'subtle'} leftSection={<IconPackage size={16} />}>
                                 Contenants
+                            </Button>
+                            <Button component={Link} href="/admin/zones" variant={pathname?.startsWith('/admin/zones') ? 'filled' : 'subtle'} leftSection={<IconMapPins size={16} />}>
+                                Zones
                             </Button>
                         </Group>
 

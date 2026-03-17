@@ -11,6 +11,20 @@ type OrderedItem = {
     selectedOptions?: Record<string, any>; // JSON structure
 };
 
+import { pointInPolygon, type ZonePoint } from '@/lib/geo';
+
+export async function getMenuDeliveryZoneAction(menuId: string) {
+    const menu = await prisma.menu.findUnique({
+        where: { id: menuId },
+        select: { deliveryZone: { select: { name: true, polygon: true } } },
+    });
+    if (!menu?.deliveryZone) return null;
+    return {
+        name: menu.deliveryZone.name,
+        polygon: menu.deliveryZone.polygon as ZonePoint[],
+    };
+}
+
 // @ts-ignore
 export async function createOrderAction(menuId: string, items: OrderedItem[], deliveryAddress: string, packaging: 'CARDBOARD' | 'TUPPERWARE', returnedCount: number, notes?: string, dietaryOption?: string) {
     const session = await getServerSession(authOptions);
@@ -20,7 +34,10 @@ export async function createOrderAction(menuId: string, items: OrderedItem[], de
     if (!deliveryAddress) return { success: false, error: "Adresse de livraison requise" };
 
     try {
-        const menu = await prisma.menu.findUnique({ where: { id: menuId } });
+        const menu = await prisma.menu.findUnique({
+            where: { id: menuId },
+            include: { deliveryZone: true },
+        });
         if (!menu) return { success: false, error: "Menu introuvable" };
 
         // Vérifie le verrou manuel admin
@@ -30,6 +47,34 @@ export async function createOrderAction(menuId: string, items: OrderedItem[], de
                 success: false,
                 error: "Les commandes pour ce menu ont été fermées par l'administrateur."
             };
+        }
+
+        // Vérification zone de livraison
+        if (menu.deliveryZone) {
+            const zone = menu.deliveryZone;
+            const polygon = zone.polygon as ZonePoint[];
+
+            // Retrouve l'adresse sélectionnée par l'utilisateur via son contenu
+            const userAddresses = await prisma.address.findMany({
+                where: { userId: session.user.id },
+                select: { content: true, lat: true, lon: true },
+            });
+
+            const matchedAddress = userAddresses.find(a => deliveryAddress.includes(a.content));
+
+            if (!matchedAddress?.lat || !matchedAddress?.lon) {
+                // Adresse sans coordonnées (ancienne adresse non géocodée) — on laisse passer
+                // mais on log pour suivi
+                console.warn(`[zone-check] Adresse sans coordonnées pour userId=${session.user.id}, zone=${zone.name}`);
+            } else {
+                const isInZone = pointInPolygon(matchedAddress.lat, matchedAddress.lon, polygon);
+                if (!isInZone) {
+                    return {
+                        success: false,
+                        error: `Votre adresse n'est pas dans la zone de livraison "${zone.name}" pour ce menu. Choisissez une autre adresse ou attendez un menu disponible dans votre zone.`,
+                    };
+                }
+            }
         }
 
         // Check ordering deadline: orders close at 21:00 the day before

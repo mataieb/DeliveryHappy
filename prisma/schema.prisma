@@ -36,6 +36,8 @@ model Address {
   label     String   // e.g. "Home", "Office"
   content   String   // e.g. "123 Main St, Apt 4B, Paris"
   details   String?  // e.g. "Code 1234, Etage 2"
+  lat       Float?   // Latitude (from BAN autocomplete or migration script)
+  lon       Float?   // Longitude
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
@@ -79,14 +81,26 @@ model VerificationToken {
 
 // App Domain Models
 
+model DeliveryZone {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#228be6") // Hex color for map display
+  polygon   Json     // ZonePoint[] = [{ lat: number, lon: number }]
+  menus     Menu[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Menu {
-  id        String     @id @default(cuid())
-  date      DateTime   @unique
-  locked    Boolean    @default(false) // Manuel admin override
-  items     MenuItem[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  orders    Order[]
+  id               String        @id @default(cuid())
+  date             DateTime      @unique
+  locked           Boolean       @default(false) // Manuel admin override
+  items            MenuItem[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  orders           Order[]
+  deliveryZoneId   String?
+  deliveryZone     DeliveryZone? @relation(fields: [deliveryZoneId], references: [id], onDelete: SetNull)
 }
 
 model MenuItem {

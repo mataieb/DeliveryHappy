@@ -40,7 +40,7 @@ export async function updatePhoneNumber(phoneNumber: string) {
     }
 }
 
-export async function addAddressAction(label: string, content: string, details?: string) {
+export async function addAddressAction(label: string, content: string, details?: string, lat?: number, lon?: number) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return { success: false, error: "Non authentifié" };
 
@@ -53,6 +53,8 @@ export async function addAddressAction(label: string, content: string, details?:
                 label,
                 content,
                 details,
+                lat: lat ?? null,
+                lon: lon ?? null,
             },
         });
         revalidatePath('/preferences');
@@ -82,7 +84,7 @@ export async function deleteAddressAction(id: string) {
     }
 }
 
-export async function updateAddressAction(id: string, label: string, content: string, details?: string) {
+export async function updateAddressAction(id: string, label: string, content: string, details?: string, lat?: number, lon?: number) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return { success: false, error: "Non authentifié" };
 
@@ -96,7 +98,13 @@ export async function updateAddressAction(id: string, label: string, content: st
 
         await prisma.address.update({
             where: { id },
-            data: { label, content, details },
+            data: {
+                label,
+                content,
+                details,
+                // Mettre à jour les coordonnées seulement si fournies (sélection depuis l'autocomplete)
+                ...(lat !== undefined && lon !== undefined ? { lat, lon } : {}),
+            },
         });
         revalidatePath('/preferences');
         return { success: true };

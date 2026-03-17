@@ -9,23 +9,48 @@ import {
     Button,
     Stack,
     Chip,
-    Divider,
     SimpleGrid,
     Card,
     ActionIcon,
     Modal,
     TextInput,
-    Textarea,
-    Alert
+    Alert,
+    Combobox,
+    useCombobox,
+    Loader,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useDebouncedValue } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useSearchParams } from 'next/navigation';
 import { IconTrash, IconPlus, IconMapPin, IconDeviceFloppy, IconPencil } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { updateDietaryPreferences, addAddressAction, deleteAddressAction, updateAddressAction } from './actions';
 import { DietaryOption, Address } from '@prisma/client';
+
+// BAN — Base Adresse Nationale (gratuit, sans clé, pour la France)
+const BAN_URL = 'https://api-adresse.data.gouv.fr/search/';
+
+type BanFeature = {
+    properties: {
+        id: string;
+        label: string;
+        postcode: string;
+        city: string;
+    };
+    geometry: {
+        coordinates: [number, number]; // [longitude, latitude]
+    };
+};
+
+async function fetchBanSuggestions(query: string): Promise<BanFeature[]> {
+    if (query.trim().length < 3) return [];
+    const params = new URLSearchParams({ q: query, limit: '6', autocomplete: '1' });
+    const res = await fetch(`${BAN_URL}?${params}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.features ?? [];
+}
 
 const DIETARY_LABELS: Record<string, string> = {
     'VEGETARIAN': 'Végétarien',
@@ -58,6 +83,14 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     const [addressLoading, setAddressLoading] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
+    // Autocomplete BAN
+    const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
+    const [suggestions, setSuggestions] = useState<BanFeature[]>([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+    const [addressCoords, setAddressCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const [hasSelectedFromDropdown, setHasSelectedFromDropdown] = useState(false);
+    const abortRef = useRef<AbortController | null>(null);
+
     const addressForm = useForm({
         initialValues: {
             label: '',
@@ -69,6 +102,29 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             content: (val) => (val.length < 5 ? 'Adresse trop courte' : null),
         },
     });
+
+    const [debouncedContent] = useDebouncedValue(addressForm.values.content, 300);
+
+    useEffect(() => {
+        if (hasSelectedFromDropdown) return; // Ne pas re-chercher après une sélection
+
+        if (debouncedContent.trim().length < 3) {
+            setSuggestions([]);
+            combobox.closeDropdown();
+            return;
+        }
+
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
+        setLoadingSuggestions(true);
+
+        fetchBanSuggestions(debouncedContent).then(results => {
+            setSuggestions(results);
+            setLoadingSuggestions(false);
+            if (results.length > 0) combobox.openDropdown();
+            else combobox.closeDropdown();
+        });
+    }, [debouncedContent]);
 
     const handleSaveDietary = async () => {
         setLoadingInfo(true);
@@ -108,6 +164,9 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     const handleOpenNew = () => {
         setEditingId(null);
         addressForm.reset();
+        setSuggestions([]);
+        setAddressCoords(null);
+        setHasSelectedFromDropdown(false);
         open();
     };
 
@@ -119,7 +178,20 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             // @ts-ignore
             details: addr.details || '',
         });
+        setSuggestions([]);
+        // @ts-ignore — lat/lon ajoutés via migration schema
+        setAddressCoords(addr.lat && addr.lon ? { lat: addr.lat, lon: addr.lon } : null);
+        setHasSelectedFromDropdown(false);
         open();
+    };
+
+    const handleSelectSuggestion = (feature: BanFeature) => {
+        const [lon, lat] = feature.geometry.coordinates;
+        addressForm.setFieldValue('content', feature.properties.label);
+        setAddressCoords({ lat, lon });
+        setHasSelectedFromDropdown(true);
+        setSuggestions([]);
+        combobox.closeDropdown();
     };
 
     const handleSaveAddress = async (values: typeof addressForm.values) => {
@@ -127,9 +199,22 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
         try {
             let res;
             if (editingId) {
-                res = await updateAddressAction(editingId, values.label, values.content, values.details);
+                res = await updateAddressAction(
+                    editingId,
+                    values.label,
+                    values.content,
+                    values.details,
+                    addressCoords?.lat,
+                    addressCoords?.lon,
+                );
             } else {
-                res = await addAddressAction(values.label, values.content, values.details);
+                res = await addAddressAction(
+                    values.label,
+                    values.content,
+                    values.details,
+                    addressCoords?.lat,
+                    addressCoords?.lon,
+                );
             }
 
             if (res.success) {
@@ -141,6 +226,8 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                 close();
                 addressForm.reset();
                 setEditingId(null);
+                setAddressCoords(null);
+                setHasSelectedFromDropdown(false);
             } else {
                 notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
             }
@@ -295,13 +382,45 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                             withAsterisk
                             {...addressForm.getInputProps('label')}
                         />
-                        <Textarea
-                            label="Adresse Complète"
-                            placeholder="32 Rue de..."
-                            withAsterisk
-                            minRows={3}
-                            {...addressForm.getInputProps('content')}
-                        />
+
+                        <Combobox store={combobox} onOptionSubmit={() => {}}>
+                            <Combobox.Target>
+                                <TextInput
+                                    label="Adresse"
+                                    placeholder="32 rue de Rivoli, Paris..."
+                                    withAsterisk
+                                    rightSection={loadingSuggestions ? <Loader size="xs" /> : null}
+                                    {...addressForm.getInputProps('content')}
+                                    onChange={(e) => {
+                                        addressForm.setFieldValue('content', e.currentTarget.value);
+                                        setHasSelectedFromDropdown(false);
+                                        setAddressCoords(null);
+                                    }}
+                                    onFocus={() => {
+                                        if (suggestions.length > 0) combobox.openDropdown();
+                                    }}
+                                    onBlur={() => combobox.closeDropdown()}
+                                />
+                            </Combobox.Target>
+
+                            <Combobox.Dropdown>
+                                <Combobox.Options>
+                                    {suggestions.map((feature) => (
+                                        <Combobox.Option
+                                            key={feature.properties.id}
+                                            value={feature.properties.label}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault(); // évite le blur avant le clic
+                                                handleSelectSuggestion(feature);
+                                            }}
+                                        >
+                                            {feature.properties.label}
+                                        </Combobox.Option>
+                                    ))}
+                                </Combobox.Options>
+                            </Combobox.Dropdown>
+                        </Combobox>
+
                         <TextInput
                             label="Complément"
                             placeholder="Code: 1234, Etage..."

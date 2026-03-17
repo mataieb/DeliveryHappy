@@ -38,7 +38,7 @@ export type MenuItemInput = {
     optionGroups: OptionGroupInput[];
 };
 
-export async function createMenuAction(date: Date, items: MenuItemInput[]) {
+export async function createMenuAction(date: Date, items: MenuItemInput[], deliveryZoneId?: string | null) {
     try {
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
@@ -56,6 +56,7 @@ export async function createMenuAction(date: Date, items: MenuItemInput[]) {
         await prisma.menu.create({
             data: {
                 date: startOfDay,
+                deliveryZoneId: deliveryZoneId || null,
                 items: {
                     create: items.map(item => ({
                         name: item.name,
@@ -106,15 +107,15 @@ export async function deleteMenuAction(id: string) {
     }
 }
 
-export async function updateMenuAction(id: string, date: Date, items: MenuItemInput[]) {
+export async function updateMenuAction(id: string, date: Date, items: MenuItemInput[], deliveryZoneId?: string | null) {
     try {
         const startOfDay = new Date(date);
         startOfDay.setHours(0, 0, 0, 0);
 
-        // 1. Update Menu Date
+        // 1. Update Menu Date + Zone
         await prisma.menu.update({
             where: { id },
-            data: { date: startOfDay },
+            data: { date: startOfDay, deliveryZoneId: deliveryZoneId || null },
         });
 
         // 2. Handle Items

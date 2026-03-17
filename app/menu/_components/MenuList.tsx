@@ -12,10 +12,12 @@ import ItemOptionsModal from "./ItemOptionsModal";
 import { isOrderingOpen, orderingDeadline } from "@/lib/ordering";
 import { useCart } from "@/app/_components/CartContext";
 import { CartItem, generateCartId } from "@/lib/cart";
-import { IconAlertCircle, IconLock } from "@tabler/icons-react";
+import { IconAlertCircle, IconLock, IconMapPinOff } from "@tabler/icons-react";
 
 interface MenuListProps {
-    menus: (Menu & { items: MenuItemWithOptions[] })[];
+    menus: (Menu & { items: MenuItemWithOptions[]; deliveryZone?: { name: string } | null })[];
+    zoneStatusByMenuId: Record<string, 'blocked' | 'partial' | 'no_coords' | null>;
+    validAddressLabelsByMenuId: Record<string, string[]>;
 }
 
 // Pending item waiting for cross-day confirmation
@@ -25,7 +27,7 @@ interface PendingSwitch {
     cartItem: CartItem;
 }
 
-export default function MenuList({ menus }: MenuListProps) {
+export default function MenuList({ menus, zoneStatusByMenuId, validAddressLabelsByMenuId }: MenuListProps) {
     const { cart, addItem, switchCart } = useCart();
     const [activeTab, setActiveTab] = useState<string | null>(menus[0]?.id ?? null);
     const [modalItem, setModalItem] = useState<MenuItemWithOptions | null>(null);
@@ -161,6 +163,10 @@ export default function MenuList({ menus }: MenuListProps) {
                     const open = canOrder(menu.date, locked);
                     const deadline = orderingDeadline(menu.date);
                     const menuDateStr = menu.date instanceof Date ? menu.date.toISOString() : String(menu.date);
+                    const zoneStatus = zoneStatusByMenuId[menu.id];
+                    const isZoneBlocked = zoneStatus === 'blocked';
+                    const isZonePartial = zoneStatus === 'partial';
+                    const validLabels = validAddressLabelsByMenuId[menu.id] ?? [];
 
                     return (
                         <Tabs.Panel key={menu.id} value={menu.id}>
@@ -201,6 +207,36 @@ export default function MenuList({ menus }: MenuListProps) {
                                 </Alert>
                             )}
 
+                            {/* Alerte : toutes les adresses hors zone */}
+                            {isZoneBlocked && !isPast && (
+                                <Alert
+                                    icon={<IconMapPinOff size={16} />}
+                                    color="orange"
+                                    variant="light"
+                                    mb="md"
+                                >
+                                    La livraison n&apos;est pas disponible dans votre zone pour ce jour.
+                                    Revenez un autre jour ou mettez à jour vos adresses dans vos <strong>préférences</strong>.
+                                </Alert>
+                            )}
+
+                            {/* Alerte : certaines adresses hors zone */}
+                            {isZonePartial && !isPast && (
+                                <Alert
+                                    icon={<IconMapPinOff size={16} />}
+                                    color="yellow"
+                                    variant="light"
+                                    mb="md"
+                                >
+                                    Certaines de vos adresses ne sont pas dans la zone de livraison de ce jour.
+                                    {validLabels.length > 0 && (
+                                        <Text size="sm" mt={4}>
+                                            Adresse{validLabels.length > 1 ? 's' : ''} disponible{validLabels.length > 1 ? 's' : ''} : <strong>{validLabels.join(', ')}</strong>
+                                        </Text>
+                                    )}
+                                </Alert>
+                            )}
+
                             {menu.items.length === 0 ? (
                                 <Text c="dimmed">Aucun plat disponible pour ce jour.</Text>
                             ) : (
@@ -213,8 +249,8 @@ export default function MenuList({ menus }: MenuListProps) {
                                         <MenuItemCard
                                             key={item.id}
                                             item={item}
-                                            canOrder={open}
-                                            onAdd={open ? (i) => handleAddItem(menu.id, menuDateStr, i) : undefined}
+                                            canOrder={open && !isZoneBlocked}
+                                            onAdd={(open && !isZoneBlocked) ? (i) => handleAddItem(menu.id, menuDateStr, i) : undefined}
                                         />
                                     ))}
                                 </SimpleGrid>

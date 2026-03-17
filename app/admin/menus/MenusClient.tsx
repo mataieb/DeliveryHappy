@@ -24,6 +24,7 @@ import {
     ThemeIcon,
     Alert,
     Accordion,
+    ColorSwatch,
 } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
@@ -61,9 +62,13 @@ const DIETARY_OPTIONS = [
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type ZoneOption = { id: string; name: string; color: string };
+
 type MenuWithItems = {
     id: string;
     date: Date;
+    deliveryZoneId: string | null;
+    deliveryZone: ZoneOption | null;
     items: {
         id: string;
         name: string;
@@ -261,6 +266,18 @@ function MenuCard({
                         </Text>
                     </Group>
                     <Group gap="xs">
+                        {menu.deliveryZone && (
+                            <Badge
+                                variant="light"
+                                color="teal"
+                                size="sm"
+                                leftSection={
+                                    <ColorSwatch color={menu.deliveryZone.color} size={8} />
+                                }
+                            >
+                                {menu.deliveryZone.name}
+                            </Badge>
+                        )}
                         <Badge variant="light" color={isPast ? 'gray' : 'blue'}>
                             {menu.items.length} plat{menu.items.length > 1 ? 's' : ''}
                         </Badge>
@@ -346,7 +363,7 @@ function MenuCard({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
+export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; zones: ZoneOption[] }) {
     const [opened, { open, close }] = useDisclosure(false);
     const [loading, setLoading] = useState(false);
     const [weeklyNotifying, setWeeklyNotifying] = useState(false);
@@ -401,6 +418,7 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
     const form = useForm({
         initialValues: {
             date: new Date(),
+            deliveryZoneId: '' as string,
             items: [{ ...EMPTY_ITEM }] as MenuItemInputWithUIHelpers[],
         },
         validate: {
@@ -422,6 +440,7 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
         setEditingId(menu.id);
         form.setValues({
             date: new Date(menu.date),
+            deliveryZoneId: menu.deliveryZoneId ?? '',
             items: menu.items.map(item => {
                 let hasProtein = false;
                 let proteinPrice = 0;
@@ -593,9 +612,10 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
                 };
             });
 
+            const zoneId = values.deliveryZoneId || null;
             const result = editingId
-                ? await updateMenuAction(editingId, values.date, processedItems)
-                : await createMenuAction(values.date, processedItems);
+                ? await updateMenuAction(editingId, values.date, processedItems, zoneId)
+                : await createMenuAction(values.date, processedItems, zoneId);
 
             if (result.success) {
                 notifications.show({
@@ -712,6 +732,20 @@ export default function MenusClient({ menus }: { menus: MenuWithItems[] }) {
                             placeholder="Choisir une date"
                             locale="fr"
                             {...form.getInputProps('date')}
+                        />
+
+                        <Select
+                            label="Zone de livraison"
+                            description="Optionnel — restreint les commandes à une zone géographique."
+                            placeholder="Aucune restriction (livraison partout)"
+                            clearable
+                            data={zones.map(z => ({ value: z.id, label: z.name }))}
+                            {...form.getInputProps('deliveryZoneId')}
+                            leftSection={
+                                form.values.deliveryZoneId
+                                    ? <Box style={{ width: 10, height: 10, borderRadius: 2, background: zones.find(z => z.id === form.values.deliveryZoneId)?.color ?? '#888' }} />
+                                    : null
+                            }
                         />
 
                         <Text fw={500} mt="md">Plats du jour</Text>

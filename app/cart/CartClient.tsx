@@ -2,18 +2,19 @@
 
 import {
     Container, Title, Text, Button, Group, Stack, Card, Radio, Divider, Badge,
-    Alert, Textarea, NumberInput, Table, ActionIcon, Anchor, ThemeIcon
+    Alert, Textarea, NumberInput, ActionIcon, Anchor, ThemeIcon
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { createOrderAction } from '../order/actions';
+import { createOrderAction, getMenuDeliveryZoneAction } from '../order/actions';
 import { Address } from '@prisma/client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { IconAlertCircle, IconArrowLeft, IconShoppingCartOff, IconTrash, IconCheck } from '@tabler/icons-react';
+import { IconAlertCircle, IconArrowLeft, IconShoppingCartOff, IconTrash, IconCheck, IconMapPinOff } from '@tabler/icons-react';
 import { useCart } from '@/app/_components/CartContext';
+import { pointInPolygon, type ZonePoint } from '@/lib/geo';
 
 type Props = {
     addresses: Address[];
@@ -22,15 +23,44 @@ type Props = {
     tupperwareEnabled: boolean;
 };
 
+type DeliveryZone = { name: string; polygon: ZonePoint[] } | null;
+
+function isAddressInZone(addr: Address, zone: DeliveryZone): boolean {
+    if (!zone) return true;
+    const lat = (addr as any).lat as number | null;
+    const lon = (addr as any).lon as number | null;
+    if (!lat || !lon) return true; // Pas de coords → on laisse passer (ancienne adresse)
+    return pointInPolygon(lat, lon, zone.polygon);
+}
+
 export default function CartClient({ addresses, containerBalance, tupperwareEnabled, userPhoneNumber }: Props) {
     const router = useRouter();
     const { cart, removeItem, clearCurrentCart, totalPrice } = useCart();
     const [loading, setLoading] = useState(false);
-    const [addressId, setAddressId] = useState(addresses.length > 0 ? addresses[0].id : '');
     const [packaging, setPackaging] = useState<'CARDBOARD' | 'TUPPERWARE'>('CARDBOARD');
     const [returnCount, setReturnCount] = useState(containerBalance > 0 ? containerBalance : 0);
     const [notes, setNotes] = useState('');
     const [timeConstraint, setTimeConstraint] = useState('');
+    const [deliveryZone, setDeliveryZone] = useState<DeliveryZone>(null);
+
+    // Charger la zone du menu dès que le cart est connu
+    useEffect(() => {
+        if (!cart?.menuId) return;
+        getMenuDeliveryZoneAction(cart.menuId).then(setDeliveryZone);
+    }, [cart?.menuId]);
+
+    // Pré-sélectionner la première adresse valide quand la zone est connue
+    useEffect(() => {
+        const firstValid = addresses.find(a => isAddressInZone(a, deliveryZone));
+        setAddressId(firstValid?.id ?? (addresses[0]?.id ?? ''));
+    }, [deliveryZone, addresses]);
+
+    // Adresses valides vs hors zone
+    const validAddresses = addresses.filter(a => isAddressInZone(a, deliveryZone));
+    const hasAnyValidAddress = validAddresses.length > 0;
+
+    // Sélectionner la première adresse valide par défaut
+    const [addressId, setAddressId] = useState('');
 
     // Empty cart state
     if (!cart || cart.items.length === 0) {
@@ -258,18 +288,53 @@ export default function CartClient({ addresses, containerBalance, tupperwareEnab
                             <Anchor component={Link} href="/preferences">Ajouter une adresse</Anchor>
                         </Alert>
                     ) : (
-                        <Radio.Group value={addressId} onChange={setAddressId}>
-                            <Stack>
-                                {addresses.map(addr => (
-                                    <Radio
-                                        key={addr.id}
-                                        value={addr.id}
-                                        // @ts-ignore
-                                        label={`${addr.label} — ${addr.content}${addr.details ? ` (${addr.details})` : ''}`}
-                                    />
-                                ))}
-                            </Stack>
-                        </Radio.Group>
+                        <>
+                            {deliveryZone && !hasAnyValidAddress && (
+                                <Alert icon={<IconMapPinOff size={16} />} color="red" mb="md"
+                                    title={`Zone "${deliveryZone.name}" — Livraison impossible`}
+                                >
+                                    Aucune de vos adresses ne se trouve dans la zone de livraison de ce menu.
+                                    Mettez à jour vos adresses dans vos{' '}
+                                    <Anchor component={Link} href="/preferences">préférences</Anchor>.
+                                </Alert>
+                            )}
+                            {/*{deliveryZone && hasAnyValidAddress && validAddresses.length < addresses.length && (
+                                <Alert icon={<IconMapPinOff size={16} />} color="yellow" variant="light" mb="md">
+                                    Certaines de vos adresses ne sont pas dans la zone de livraison et ont été désactivées.
+                                    <Text size="sm" mt={4}>
+                                        Adresse{validAddresses.length > 1 ? 's' : ''} disponible{validAddresses.length > 1 ? 's' : ''} : {validAddresses.map(a => a.content).join(', ')}
+                                    </Text>
+                                </Alert>
+                            )}*/}
+                            <Radio.Group value={addressId} onChange={setAddressId}>
+                                <Stack>
+                                    {addresses.map(addr => {
+                                        const inZone = isAddressInZone(addr, deliveryZone);
+                                        return (
+                                            <Radio
+                                                key={addr.id}
+                                                value={addr.id}
+                                                disabled={!inZone}
+                                                // @ts-ignore
+                                                label={
+                                                    <Group gap="xs">
+                                                        <Text size="sm" c={inZone ? undefined : 'dimmed'}>
+                                                            {/* @ts-ignore */}
+                                                            {addr.label} — {addr.content}{addr.details ? ` (${addr.details})` : ''}
+                                                        </Text>
+                                                        {!inZone && (
+                                                            <Badge size="xs" color="orange" variant="light">
+                                                                Hors zone
+                                                            </Badge>
+                                                        )}
+                                                    </Group>
+                                                }
+                                            />
+                                        );
+                                    })}
+                                </Stack>
+                            </Radio.Group>
+                        </>
                     )}
                 </Card>
 
@@ -290,12 +355,14 @@ export default function CartClient({ addresses, containerBalance, tupperwareEnab
                     size="lg"
                     leftSection={<IconCheck size={20} />}
                     loading={loading}
-                    disabled={addresses.length === 0 || cart.items.length === 0}
+                    disabled={addresses.length === 0 || cart.items.length === 0 || !hasAnyValidAddress}
                     onClick={handleSubmit}
                     variant="gradient"
                     gradient={{ from: 'indigo', to: 'cyan' }}
                 >
-                    Valider la commande — {totalPrice.toFixed(2)} €
+                    {!hasAnyValidAddress && deliveryZone
+                        ? `Livraison indisponible dans votre zone`
+                        : `Valider la commande — ${totalPrice.toFixed(2)} €`}
                 </Button>
             </Stack>
         </Container>
