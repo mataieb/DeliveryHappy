@@ -18,6 +18,8 @@ import {
     Combobox,
     useCombobox,
     Loader,
+    SegmentedControl,
+    Badge,
 } from '@mantine/core';
 import { useDisclosure, useDebouncedValue } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
@@ -26,7 +28,7 @@ import { useSearchParams } from 'next/navigation';
 import { IconTrash, IconPlus, IconMapPin, IconDeviceFloppy, IconPencil } from '@tabler/icons-react';
 import { useState, useEffect, useRef } from 'react';
 import { updateDietaryPreferences, addAddressAction, deleteAddressAction, updateAddressAction } from './actions';
-import { DietaryOption, Address } from '@prisma/client';
+import { DietaryOption, Address, AddressType } from '@prisma/client';
 
 // BAN — Base Adresse Nationale (gratuit, sans clé, pour la France)
 const BAN_URL = 'https://api-adresse.data.gouv.fr/search/';
@@ -94,6 +96,7 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     const addressForm = useForm({
         initialValues: {
             label: '',
+            type: 'DOMICILE' as AddressType,
             content: '',
             details: '',
         },
@@ -174,6 +177,7 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
         setEditingId(addr.id);
         addressForm.setValues({
             label: addr.label,
+            type: addr.type,
             content: addr.content,
             // @ts-ignore
             details: addr.details || '',
@@ -206,6 +210,7 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                     values.details,
                     addressCoords?.lat,
                     addressCoords?.lon,
+                    values.type,
                 );
             } else {
                 res = await addAddressAction(
@@ -214,6 +219,7 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                     values.details,
                     addressCoords?.lat,
                     addressCoords?.lon,
+                    values.type,
                 );
             }
 
@@ -349,6 +355,9 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                                     <Group gap="xs">
                                         <IconMapPin size={16} color="gray" />
                                         <Text fw={600}>{addr.label}</Text>
+                                        <Badge size="xs" variant="light" color={addr.type === 'BUREAU' ? 'blue' : 'green'}>
+                                            {addr.type === 'BUREAU' ? 'Bureau' : 'Domicile'}
+                                        </Badge>
                                     </Group>
                                     <Group gap={0}>
                                         <ActionIcon color="blue" variant="subtle" onClick={() => handleEdit(addr)}>
@@ -376,9 +385,16 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             <Modal opened={opened} onClose={close} title={editingId ? "Modifier l'adresse" : "Ajouter une adresse"}>
                 <form onSubmit={addressForm.onSubmit(handleSaveAddress)}>
                     <Stack>
+                        <SegmentedControl
+                            data={[
+                                { label: '🏠 Domicile', value: 'DOMICILE' },
+                                { label: '🏢 Bureau', value: 'BUREAU' },
+                            ]}
+                            {...addressForm.getInputProps('type')}
+                        />
                         <TextInput
-                            label="Nom (ex: Bureau, Maison)"
-                            placeholder="Bureau"
+                            label="Nom (ex: Chez moi, Bureau principal)"
+                            placeholder="Chez moi"
                             withAsterisk
                             {...addressForm.getInputProps('label')}
                         />

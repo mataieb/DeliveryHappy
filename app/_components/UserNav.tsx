@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
     IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboard,
-    IconUser, IconLogout, IconTruck, IconPackage, IconMapPins, IconChevronDown
+    IconUser, IconLogout, IconTruck, IconPackage, IconMapPins, IconChevronDown, IconHome
 } from "@tabler/icons-react";
 
 export function UserNav() {
@@ -25,7 +25,8 @@ export function UserNav() {
 
     const isLogistique = pathname?.startsWith('/admin/delivery') ||
         pathname?.startsWith('/admin/containers') ||
-        pathname?.startsWith('/admin/zones');
+        pathname?.startsWith('/admin/zones') ||
+        pathname?.startsWith('/admin/addresses');
 
     return (
         <div style={{ borderBottom: '1px solid #eee', backgroundColor: 'white', marginBottom: '20px' }}>
@@ -67,6 +68,9 @@ export function UserNav() {
                                     </Menu.Item>
                                     <Menu.Item component={Link} href="/admin/zones" leftSection={<IconMapPins size={14} />}>
                                         Zones
+                                    </Menu.Item>
+                                    <Menu.Item component={Link} href="/admin/addresses" leftSection={<IconHome size={14} />}>
+                                        Adresses
                                     </Menu.Item>
                                 </Menu.Dropdown>
                             </Menu>

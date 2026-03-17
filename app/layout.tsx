@@ -14,7 +14,7 @@ const outfit = Outfit({ subsets: ["latin"] });
 
 
 export const metadata: Metadata = {
-  title: "Maitre Taieb's Kitchen",
+  title: "Taieb's Kitchen",
   description: "Commandez votre déjeuner en quelques clics",
 };
 
@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <head>
+      <head suppressHydrationWarning>
         <ColorSchemeScript />
       </head>
       <body className={outfit.className}>

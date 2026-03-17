@@ -31,17 +31,23 @@ model User {
   updatedAt     DateTime  @updatedAt
 }
 
+enum AddressType {
+  DOMICILE
+  BUREAU
+}
+
 model Address {
-  id        String   @id @default(cuid())
-  label     String   // e.g. "Home", "Office"
-  content   String   // e.g. "123 Main St, Apt 4B, Paris"
-  details   String?  // e.g. "Code 1234, Etage 2"
-  lat       Float?   // Latitude (from BAN autocomplete or migration script)
-  lon       Float?   // Longitude
+  id        String      @id @default(cuid())
+  label     String      // e.g. "Home", "Office"
+  type      AddressType @default(DOMICILE)
+  content   String      // e.g. "123 Main St, Apt 4B, Paris"
+  details   String?     // e.g. "Code 1234, Etage 2"
+  lat       Float?      // Latitude (from BAN autocomplete or migration script)
+  lon       Float?      // Longitude
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 }
 
 model Account {
