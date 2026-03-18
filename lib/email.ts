@@ -166,6 +166,82 @@ export async function sendMenuNotificationEmails(
     }
 }
 
+// ─── Email verification template ─────────────────────────────────────────────
+
+export async function sendVerificationEmail(email: string, name: string, token: string) {
+    if (!process.env.RESEND_API_KEY) {
+        console.error('[Resend] RESEND_API_KEY non configurée.');
+        return;
+    }
+
+    const verificationUrl = `${APP_URL}/api/auth/verify-email?token=${token}`;
+
+    const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0; padding:0; background:#f8f9fa; font-family: 'Segoe UI', Arial, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa; padding: 32px 16px;">
+        <tr><td align="center">
+            <table width="540" cellpadding="0" cellspacing="0" style="max-width:540px; width:100%;">
+
+                <!-- Header -->
+                <tr><td style="background: linear-gradient(135deg, #4c6ef5 0%, #15aabf 100%); border-radius:16px 16px 0 0; padding:32px; text-align:center;">
+                    <div style="font-size:40px; margin-bottom:12px;">✉️</div>
+                    <h1 style="margin:0; color:white; font-size:22px; font-weight:700; letter-spacing:-0.5px;">
+                        Confirmez votre email
+                    </h1>
+                    <p style="margin:8px 0 0; color:rgba(255,255,255,0.85); font-size:14px;">
+                        Taieb's Kitchen
+                    </p>
+                </td></tr>
+
+                <!-- Body -->
+                <tr><td style="background:white; padding:32px 28px;">
+                    <p style="margin:0 0 16px; color:#495057; font-size:15px; line-height:1.6;">
+                        Bonjour <strong>${name}</strong>,
+                    </p>
+                    <p style="margin:0 0 24px; color:#495057; font-size:15px; line-height:1.6;">
+                        Merci pour votre inscription ! Cliquez sur le bouton ci-dessous pour confirmer votre adresse email et activer votre compte.
+                    </p>
+
+                    <div style="text-align:center; margin:28px 0;">
+                        <a href="${verificationUrl}"
+                           style="display:inline-block; background: linear-gradient(135deg, #4c6ef5, #15aabf); color:white; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px; box-shadow: 0 4px 15px rgba(76,110,245,0.35);">
+                            Confirmer mon email
+                        </a>
+                    </div>
+
+                    <p style="margin:24px 0 0; color:#adb5bd; font-size:12px; line-height:1.6; text-align:center;">
+                        Ce lien expire dans <strong>24 heures</strong>.<br/>
+                        Si vous n'avez pas créé de compte, ignorez cet email.
+                    </p>
+                </td></tr>
+
+                <!-- Footer -->
+                <tr><td style="background:#f8f9fa; border-radius:0 0 16px 16px; padding:20px 28px; text-align:center; border-top: 1px solid #e9ecef;">
+                    <p style="margin:0; color:#adb5bd; font-size:11px;">
+                        Taieb's Kitchen · Si le bouton ne fonctionne pas, copiez ce lien : ${verificationUrl}
+                    </p>
+                </td></tr>
+
+            </table>
+        </td></tr>
+    </table>
+</body>
+</html>`;
+
+    const { error } = await resend.emails.send({
+        from: FROM_EMAIL,
+        to: email,
+        subject: "Confirmez votre email — Taieb's Kitchen",
+        html,
+    });
+
+    if (error) {
+        console.error('[Resend] Erreur envoi email vérification:', JSON.stringify(error));
+    }
+}
+
 // ─── Weekly email template ────────────────────────────────────────────────────
 
 type DayMenu = {
