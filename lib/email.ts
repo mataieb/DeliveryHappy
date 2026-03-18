@@ -132,28 +132,30 @@ export async function sendMenuNotificationEmails(
     }
 
     // ── Production mode ─────────────────────────────────────────────────────
-    const emails = recipients.map(r => r.email).filter(Boolean);
+    const validRecipients = recipients.filter(r => r.email);
 
     try {
-        const CHUNK_SIZE = 50;
+        const BATCH_SIZE = 50;
         let totalSent = 0;
 
-        for (let i = 0; i < emails.length; i += CHUNK_SIZE) {
-            const chunk = emails.slice(i, i + CHUNK_SIZE);
+        for (let i = 0; i < validRecipients.length; i += BATCH_SIZE) {
+            const chunk = validRecipients.slice(i, i + BATCH_SIZE);
 
-            const { data, error } = await resend.emails.send({
-                from: FROM_EMAIL,
-                to: chunk,
-                subject: `🍽️ Menu du ${menuDate} — Passez votre commande !`,
-                html,
-            });
+            const { data, error } = await resend.batch.send(
+                chunk.map(r => ({
+                    from: FROM_EMAIL,
+                    to: r.email,
+                    subject: `🍽️ Menu du ${menuDate} — Passez votre commande !`,
+                    html,
+                }))
+            );
 
             if (error) {
                 console.error('[Resend] API error:', JSON.stringify(error));
                 return { success: false, error: `Resend : ${error.message}` };
             }
 
-            console.log('[Resend] Sent to chunk, id:', data?.id);
+            console.log('[Resend] Batch sent, count:', data?.data?.length);
             totalSent += chunk.length;
         }
 
@@ -308,20 +310,22 @@ export async function sendWeeklyMenuNotificationEmails(
     }
 
     // ── Production mode ──────────────────────────────────────────────────────
-    const emails = recipients.map(r => r.email).filter(Boolean);
+    const validRecipients = recipients.filter(r => r.email);
     try {
-        const CHUNK_SIZE = 50;
+        const BATCH_SIZE = 50;
         let totalSent = 0;
-        for (let i = 0; i < emails.length; i += CHUNK_SIZE) {
-            const chunk = emails.slice(i, i + CHUNK_SIZE);
-            const { data, error } = await resend.emails.send({
-                from: FROM_EMAIL,
-                to: chunk,
-                subject: `🗓️ Menus de la semaine — ${weekLabel}`,
-                html,
-            });
+        for (let i = 0; i < validRecipients.length; i += BATCH_SIZE) {
+            const chunk = validRecipients.slice(i, i + BATCH_SIZE);
+            const { data, error } = await resend.batch.send(
+                chunk.map(r => ({
+                    from: FROM_EMAIL,
+                    to: r.email,
+                    subject: `🗓️ Menus de la semaine — ${weekLabel}`,
+                    html,
+                }))
+            );
             if (error) return { success: false, error: `Resend : ${error.message}` };
-            console.log('[Resend] Weekly email chunk sent, id:', data?.id);
+            console.log('[Resend] Weekly batch sent, count:', data?.data?.length);
             totalSent += chunk.length;
         }
         return { success: true, sent: totalSent };
