@@ -165,6 +165,11 @@ function LoginContent() {
                                         leftSection={<IconLock size={16} />}
                                         {...form.getInputProps("password")}
                                     />
+                                    <Text ta="right" size="xs">
+                                        <Anchor href="/forgot-password" size="xs" c="dimmed">
+                                            Mot de passe oublié ?
+                                        </Anchor>
+                                    </Text>
                                     <Button type="submit" fullWidth loading={loading} mt="xs">
                                         Se connecter
                                     </Button>

@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
     IconArrowLeft, IconShieldCheck, IconCalendar, IconReceipt, IconDashboard,
-    IconUser, IconLogout, IconTruck, IconPackage, IconMapPins, IconChevronDown, IconHome
+    IconUser, IconLogout, IconTruck, IconPackage, IconMapPins, IconChevronDown, IconHome, IconUsers
 } from "@tabler/icons-react";
 
 export function UserNav() {
@@ -47,6 +47,9 @@ export function UserNav() {
                             </Button>
                             <Button size="sm" component={Link} href="/admin/orders" variant={pathname?.startsWith('/admin/orders') ? 'filled' : 'subtle'} leftSection={<IconReceipt size={14} />}>
                                 Commandes
+                            </Button>
+                            <Button size="sm" component={Link} href="/admin/users" variant={pathname?.startsWith('/admin/users') ? 'filled' : 'subtle'} leftSection={<IconUsers size={14} />}>
+                                Utilisateurs
                             </Button>
 
                             <Menu shadow="md" width={200}>

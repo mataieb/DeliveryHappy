@@ -24,5 +24,5 @@ export default async function PreferencesPage() {
         redirect("/api/auth/signin");
     }
 
-    return <PreferencesClient user={user} />;
+    return <PreferencesClient user={{ ...user, hasPassword: !!user.password }} />;
 }

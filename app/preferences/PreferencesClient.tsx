@@ -14,6 +14,7 @@ import {
     ActionIcon,
     Modal,
     TextInput,
+    PasswordInput,
     Alert,
     Combobox,
     useCombobox,
@@ -25,9 +26,9 @@ import { useDisclosure, useDebouncedValue } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useSearchParams } from 'next/navigation';
-import { IconTrash, IconPlus, IconMapPin, IconDeviceFloppy, IconPencil } from '@tabler/icons-react';
-import { useState, useEffect, useRef } from 'react';
-import { updateDietaryPreferences, addAddressAction, deleteAddressAction, updateAddressAction } from './actions';
+import { IconTrash, IconPlus, IconMapPin, IconDeviceFloppy, IconPencil, IconLock } from '@tabler/icons-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { updateDietaryPreferences, addAddressAction, deleteAddressAction, updateAddressAction, changePassword } from './actions';
 import { DietaryOption, Address, AddressType } from '@prisma/client';
 
 // BAN — Base Adresse Nationale (gratuit, sans clé, pour la France)
@@ -68,6 +69,7 @@ type UserWithAddresses = {
     containerBalance: number;
     dietaryPreferences: DietaryOption[];
     addresses: Address[];
+    hasPassword: boolean;
 };
 
 export default function PreferencesClient({ user }: { user: UserWithAddresses }) {
@@ -79,6 +81,33 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
 
     const [loadingInfo, setLoadingInfo] = useState(false);
     const [loadingPhone, setLoadingPhone] = useState(false);
+
+    // Password change
+    const [pwCurrent, setPwCurrent] = useState('');
+    const [pwNew, setPwNew] = useState('');
+    const [pwConfirm, setPwConfirm] = useState('');
+    const [loadingPw, setLoadingPw] = useState(false);
+
+    const handleChangePassword = useCallback(async () => {
+        if (pwNew !== pwConfirm) {
+            notifications.show({ title: 'Erreur', message: 'Les mots de passe ne correspondent pas', color: 'red' });
+            return;
+        }
+        setLoadingPw(true);
+        try {
+            const res = await changePassword(pwCurrent, pwNew);
+            if (res.success) {
+                notifications.show({ title: 'Succès', message: 'Mot de passe mis à jour', color: 'green' });
+                setPwCurrent(''); setPwNew(''); setPwConfirm('');
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } catch {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de la mise à jour', color: 'red' });
+        } finally {
+            setLoadingPw(false);
+        }
+    }, [pwCurrent, pwNew, pwConfirm]);
 
     // Address Modal
     const [opened, { open, close }] = useDisclosure(false);
@@ -308,6 +337,45 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                     </Card>
                 </Stack>
             </Paper>
+
+            {user.hasPassword && (
+                <Paper withBorder p="lg" radius="md" mb="xl">
+                    <Title order={4} mb="md">Changer le mot de passe</Title>
+                    <Stack gap="sm">
+                        <PasswordInput
+                            label="Mot de passe actuel"
+                            placeholder="••••••••"
+                            leftSection={<IconLock size={16} />}
+                            value={pwCurrent}
+                            onChange={(e) => setPwCurrent(e.currentTarget.value)}
+                        />
+                        <PasswordInput
+                            label="Nouveau mot de passe"
+                            placeholder="Au moins 8 caractères"
+                            leftSection={<IconLock size={16} />}
+                            value={pwNew}
+                            onChange={(e) => setPwNew(e.currentTarget.value)}
+                        />
+                        <PasswordInput
+                            label="Confirmer le nouveau mot de passe"
+                            placeholder="••••••••"
+                            leftSection={<IconLock size={16} />}
+                            value={pwConfirm}
+                            onChange={(e) => setPwConfirm(e.currentTarget.value)}
+                        />
+                        <Group justify="flex-end">
+                            <Button
+                                onClick={handleChangePassword}
+                                loading={loadingPw}
+                                disabled={!pwCurrent || !pwNew || !pwConfirm}
+                                variant="light"
+                            >
+                                Mettre à jour
+                            </Button>
+                        </Group>
+                    </Stack>
+                </Paper>
+            )}
 
             <Paper withBorder p="lg" radius="md" mb="xl">
                 <Group justify="space-between" mb="md">
