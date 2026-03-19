@@ -306,10 +306,9 @@ export async function sendPasswordResetEmail(email: string, name: string, token:
 </body>
 </html>`;
 
-    const to = process.env.RESEND_TEST_RECIPIENT ?? email;
     const { error } = await resend.emails.send({
         from: FROM_EMAIL,
-        to,
+        to: email,
         subject: "Réinitialisation de votre mot de passe — Taieb's Kitchen",
         html,
     });
