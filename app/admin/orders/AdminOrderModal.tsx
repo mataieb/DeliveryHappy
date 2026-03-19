@@ -12,7 +12,7 @@ type User = { id: string; name: string | null; email: string; addresses: { conte
 type OptionItem = { id: string; name: string; price: number };
 type OptionGroup = { id: string; name: string; isRequired: boolean; allowMultiple: boolean; options: OptionItem[] };
 type MenuItem = { id: string; name: string; price: number; category: string; optionGroups: OptionGroup[] };
-type Menu = { id: string; date: string; items: MenuItem[] };
+type Menu = { id: string; date: Date | string; items: MenuItem[] };
 
 type EditOrder = {
     id: string;
