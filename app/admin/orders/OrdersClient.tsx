@@ -10,7 +10,8 @@ import dayjs from "dayjs";
 import 'dayjs/locale/fr';
 import { updateOrderStatusAction } from "./actions";
 import { setMenuLockedAction } from "../menus/actions";
-import { IconStarFilled, IconStar, IconMessageCircle, IconChartBar, IconLock, IconLockOpen } from "@tabler/icons-react";
+import { IconStarFilled, IconStar, IconMessageCircle, IconChartBar, IconLock, IconLockOpen, IconPlus, IconEdit } from "@tabler/icons-react";
+import { AdminOrderModal } from "./AdminOrderModal";
 
 type Order = any;
 
@@ -302,6 +303,7 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
     const [loading, setLoading] = useState<string | null>(null);
     const [lockLoading, setLockLoading] = useState<string | null>(null); // menuId being locked
     const [confirmModal, setConfirmModal] = useState({ opened: false, orderId: '', userName: '', returnedCount: 1 });
+    const [orderModal, setOrderModal] = useState<{ opened: boolean; editOrder?: any }>({ opened: false });
 
     const filteredOrders = orders.filter(order => {
         if (filter === 'ALL') return true;
@@ -351,25 +353,34 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
 
     return (
         <Stack>
-            <Group>
-                <Select
-                    label="Filtrer par statut"
-                    value={filter}
-                    onChange={(val) => setFilter(val || 'ALL')}
-                    data={[
-                        { value: 'ALL', label: 'Toutes' },
-                        { value: 'PENDING', label: 'Prise en compte' },
-                        { value: 'IN_KITCHEN', label: 'En cuisine' },
-                        { value: 'IN_DELIVERY', label: 'En livraison' },
-                        { value: 'DELIVERED', label: 'Livrées (attente paiement)' },
-                        { value: 'PAID', label: 'Livrées et payées' },
-                        { value: 'CANCELLED', label: 'Annulées' }
-                    ]}
-                    style={{ minWidth: 200 }}
-                />
-                <Text size="sm" c="dimmed" mt="xl">
-                    {filteredOrders.length} commande(s)
-                </Text>
+            <Group justify="space-between">
+                <Group>
+                    <Select
+                        label="Filtrer par statut"
+                        value={filter}
+                        onChange={(val) => setFilter(val || 'ALL')}
+                        data={[
+                            { value: 'ALL', label: 'Toutes' },
+                            { value: 'PENDING', label: 'Prise en compte' },
+                            { value: 'IN_KITCHEN', label: 'En cuisine' },
+                            { value: 'IN_DELIVERY', label: 'En livraison' },
+                            { value: 'DELIVERED', label: 'Livrées (attente paiement)' },
+                            { value: 'PAID', label: 'Livrées et payées' },
+                            { value: 'CANCELLED', label: 'Annulées' }
+                        ]}
+                        style={{ minWidth: 200 }}
+                    />
+                    <Text size="sm" c="dimmed" mt="xl">
+                        {filteredOrders.length} commande(s)
+                    </Text>
+                </Group>
+                <Button
+                    leftSection={<IconPlus size={16} />}
+                    onClick={() => setOrderModal({ opened: true })}
+                    mt="xl"
+                >
+                    Nouvelle commande
+                </Button>
             </Group>
 
             {Object.keys(groupedByDate).length === 0 ? (
@@ -521,7 +532,8 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                     <Grid>
                                                         <Grid.Col span={{ base: 12, md: 8 }}>
                                                             <Stack gap="xs">
-                                                                <Group>
+                                                                <Group justify="space-between">
+                                                                  <Group>
                                                                     <Text fw={600} size="lg">
                                                                         {order.user.name || order.user.email}
                                                                     </Text>
@@ -535,6 +547,30 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                                             </Badge>
                                                                         </Tooltip>
                                                                     )}
+                                                                  </Group>
+                                                                  <Button
+                                                                      size="xs"
+                                                                      variant="light"
+                                                                      color="blue"
+                                                                      leftSection={<IconEdit size={14} />}
+                                                                      onClick={() => setOrderModal({
+                                                                          opened: true,
+                                                                          editOrder: {
+                                                                              id: order.id,
+                                                                              userId: order.userId,
+                                                                              menuId: order.menu.id,
+                                                                              deliveryAddress: order.deliveryAddress,
+                                                                              packaging: order.packaging,
+                                                                              notes: order.notes,
+                                                                              items: order.items.map((oi: any) => ({
+                                                                                  itemId: oi.item.id,
+                                                                                  selectedOptions: oi.selectedOptions
+                                                                              }))
+                                                                          }
+                                                                      })}
+                                                                  >
+                                                                      Modifier
+                                                                  </Button>
                                                                 </Group>
 
                                                                 <Text size="sm" c="dimmed">
@@ -677,6 +713,13 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                         })}
                 </Accordion>
             )}
+
+            {/* Admin create/edit order modal */}
+            <AdminOrderModal
+                opened={orderModal.opened}
+                onClose={() => setOrderModal({ opened: false })}
+                editOrder={orderModal.editOrder}
+            />
 
             {/* Tupperware return confirm modal */}
             <Modal

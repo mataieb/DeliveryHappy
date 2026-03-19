@@ -5,6 +5,168 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+type AdminOrderItem = {
+    id: string;
+    selectedOptions?: Record<string, any>;
+};
+
+export async function getAdminOrderDataAction() {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'ADMIN') {
+        return { success: false as const, error: "Non autorisé", users: [], menus: [] };
+    }
+
+    const [users, menus] = await Promise.all([
+        prisma.user.findMany({
+            orderBy: { name: 'asc' },
+            select: { id: true, name: true, email: true, addresses: { select: { content: true } } }
+        }),
+        prisma.menu.findMany({
+            orderBy: { date: 'desc' },
+            include: {
+                items: {
+                    include: { optionGroups: { include: { options: true } } }
+                }
+            }
+        })
+    ]);
+
+    return { success: true as const, users, menus };
+}
+
+export async function adminCreateOrderAction(
+    userId: string,
+    menuId: string,
+    items: AdminOrderItem[],
+    deliveryAddress: string,
+    packaging: 'CARDBOARD' | 'TUPPERWARE',
+    notes?: string
+) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'ADMIN') {
+        return { success: false, error: "Non autorisé" };
+    }
+    if (items.length === 0) return { success: false, error: "Aucun plat sélectionné" };
+    if (!deliveryAddress) return { success: false, error: "Adresse de livraison requise" };
+
+    try {
+        const dbItems = await prisma.menuItem.findMany({
+            where: { id: { in: items.map(i => i.id) } },
+            include: { optionGroups: { include: { options: true } } }
+        });
+
+        let total = 0;
+        for (const item of items) {
+            const dbItem = dbItems.find(i => i.id === item.id);
+            if (!dbItem) continue;
+            let itemPrice = dbItem.price;
+            if (item.selectedOptions) {
+                for (const [groupId, selection] of Object.entries(item.selectedOptions)) {
+                    const group = dbItem.optionGroups.find(g => g.id === groupId);
+                    if (!group) continue;
+                    const optionIds = Array.isArray(selection) ? selection : [selection];
+                    for (const optId of optionIds) {
+                        const opt = group.options.find(o => o.id === optId);
+                        if (opt) itemPrice += opt.price;
+                    }
+                }
+            }
+            total += itemPrice;
+        }
+
+        await prisma.order.create({
+            data: {
+                userId,
+                menuId,
+                deliveryAddress,
+                notes,
+                total,
+                status: 'PENDING',
+                packaging,
+                containersReturnedCount: 0,
+                items: {
+                    create: items.map(i => ({
+                        itemId: i.id,
+                        selectedOptions: i.selectedOptions ?? undefined
+                    }))
+                }
+            }
+        });
+
+        revalidatePath('/admin/orders');
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { success: false, error: "Erreur lors de la création de la commande" };
+    }
+}
+
+export async function adminUpdateOrderItemsAction(
+    orderId: string,
+    items: AdminOrderItem[],
+    deliveryAddress: string,
+    packaging: 'CARDBOARD' | 'TUPPERWARE',
+    notes?: string
+) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user || session.user.role !== 'ADMIN') {
+        return { success: false, error: "Non autorisé" };
+    }
+    if (items.length === 0) return { success: false, error: "Aucun plat sélectionné" };
+    if (!deliveryAddress) return { success: false, error: "Adresse de livraison requise" };
+
+    try {
+        const dbItems = await prisma.menuItem.findMany({
+            where: { id: { in: items.map(i => i.id) } },
+            include: { optionGroups: { include: { options: true } } }
+        });
+
+        let total = 0;
+        for (const item of items) {
+            const dbItem = dbItems.find(i => i.id === item.id);
+            if (!dbItem) continue;
+            let itemPrice = dbItem.price;
+            if (item.selectedOptions) {
+                for (const [groupId, selection] of Object.entries(item.selectedOptions)) {
+                    const group = dbItem.optionGroups.find(g => g.id === groupId);
+                    if (!group) continue;
+                    const optionIds = Array.isArray(selection) ? selection : [selection];
+                    for (const optId of optionIds) {
+                        const opt = group.options.find(o => o.id === optId);
+                        if (opt) itemPrice += opt.price;
+                    }
+                }
+            }
+            total += itemPrice;
+        }
+
+        await prisma.$transaction(async (tx) => {
+            await tx.orderItem.deleteMany({ where: { orderId } });
+            await tx.order.update({
+                where: { id: orderId },
+                data: {
+                    deliveryAddress,
+                    notes,
+                    packaging,
+                    total,
+                    items: {
+                        create: items.map(i => ({
+                            itemId: i.id,
+                            selectedOptions: i.selectedOptions ?? undefined
+                        }))
+                    }
+                }
+            });
+        });
+
+        revalidatePath('/admin/orders');
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { success: false, error: "Erreur lors de la mise à jour de la commande" };
+    }
+}
+
 // @ts-ignore
 export async function updateOrderStatusAction(orderId: string, status: string, confirmedReturnCount: number = 0) {
     const session = await getServerSession(authOptions);
