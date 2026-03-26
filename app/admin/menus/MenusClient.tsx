@@ -61,6 +61,12 @@ const DIETARY_OPTIONS = [
     { value: 'SPICY', label: 'Épicé' },
 ];
 
+const SPICE_PRESETS = [
+    { value: '2', label: 'Doux — Pimenté', options: ['Doux', 'Pimenté'] },
+    { value: '3', label: 'Doux — Pimenté — Très pimenté', options: ['Doux', 'Pimenté', 'Très pimenté'] },
+    { value: '4', label: 'Doux — Un peu pimenté — Pimenté — Très pimenté', options: ['Doux', 'Un peu pimenté', 'Pimenté', 'Très pimenté'] },
+];
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ZoneOption = { id: string; name: string; color: string };
@@ -99,13 +105,18 @@ type MenuItemInputWithUIHelpers = MenuItemInput & {
     _proteinPrice: number;
     _hasProtein: boolean;
     _dietaryConfigs: Record<string, { price: number; description: string }>;
+    _spicePreset: string;
+    _hasComplet: boolean;
+    _completLabel: string;
+    _completPrice: number;
     spiceLevel: string | null;
 };
 
 const EMPTY_ITEM: MenuItemInputWithUIHelpers = {
     name: '', description: '', ingredients: '', price: 0,
     category: 'MAIN' as any, dietaryOptions: [], optionGroups: [],
-    spiceLevel: null, _proteinPrice: 0, _hasProtein: false, _dietaryConfigs: {}
+    spiceLevel: null, _proteinPrice: 0, _hasProtein: false, _dietaryConfigs: {}, _spicePreset: '3',
+    _hasComplet: false, _completLabel: '', _completPrice: 0
 } as unknown as MenuItemInputWithUIHelpers;
 
 // ─── Copy Modal ───────────────────────────────────────────────────────────────
@@ -454,6 +465,14 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                     proteinPrice = proteinGroup.options[0].price;
                 }
 
+                const spiceGroup = item.optionGroups.find(g => g.name === "Niveau d'épice");
+                const spicePreset = spiceGroup ? String(spiceGroup.options.length) : '3';
+
+                const completGroup = item.optionGroups.find(g => g.name === "Version Complète");
+                const hasComplet = !!completGroup && completGroup.options.length > 0;
+                const completLabel = hasComplet ? completGroup!.options[0].name : '';
+                const completPrice = hasComplet ? completGroup!.options[0].price : 0;
+
                 const variantGroup = item.optionGroups.find(g => g.name === "Variantes / Régimes");
                 const glutenGroup = item.optionGroups.find(g => g.name === "Option Sans Gluten");
 
@@ -494,6 +513,10 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                     _proteinPrice: proteinPrice,
                     _hasProtein: hasProtein,
                     _dietaryConfigs: dietaryConfigs,
+                    _spicePreset: spicePreset,
+                    _hasComplet: hasComplet,
+                    _completLabel: completLabel,
+                    _completPrice: completPrice,
                 } as unknown as MenuItemInputWithUIHelpers;
             }),
         });
@@ -539,6 +562,17 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                 let proteinGroup: OptionGroupInput | null = null;
                 let spiceGroup: OptionGroupInput | null = null;
                 let glutenFreeGroup: OptionGroupInput | null = null;
+                let completGroup: OptionGroupInput | null = null;
+
+                if (item._hasComplet && item._completLabel.trim()) {
+                    completGroup = {
+                        name: "Version Complète",
+                        isRequired: false,
+                        allowMultiple: false,
+                        maxOptions: 1,
+                        options: [{ name: item._completLabel.trim(), price: item._completPrice, description: undefined }]
+                    };
+                }
 
                 if (item._hasProtein) {
                     proteinGroup = {
@@ -552,16 +586,13 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
 
                 item.dietaryOptions.forEach(tag => {
                     if (tag === 'SPICY') {
+                        const preset = SPICE_PRESETS.find(p => p.value === item._spicePreset) ?? SPICE_PRESETS[1];
                         spiceGroup = {
                             name: "Niveau d'épice",
                             isRequired: true,
                             allowMultiple: false,
                             maxOptions: 1,
-                            options: [
-                                { name: "Doux", price: 0, description: undefined },
-                                { name: "Épicé", price: 0, description: undefined },
-                                { name: "Très Épicé", price: 0, description: undefined }
-                            ]
+                            options: preset.options.map(name => ({ name, price: 0, description: undefined }))
                         };
                         return;
                     }
@@ -597,6 +628,7 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                     });
                 }
 
+                if (completGroup) optionGroups.push(completGroup);
                 if (proteinGroup) optionGroups.push(proteinGroup);
                 if (spiceGroup) optionGroups.push(spiceGroup);
                 if (glutenFreeGroup) optionGroups.push(glutenFreeGroup);
@@ -830,6 +862,33 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                                                 )}
                                             </Group>
 
+                                            <Group mt="xs" align="flex-end">
+                                                <Switch
+                                                    label="Proposer une version complète ?"
+                                                    {...form.getInputProps(`items.${index}._hasComplet`, { type: 'checkbox' })}
+                                                />
+                                                {form.values.items[index]._hasComplet && (
+                                                    <>
+                                                        <TextInput
+                                                            placeholder="Ex: Riz complet, Pâtes complètes…"
+                                                            size="xs"
+                                                            style={{ flex: 1 }}
+                                                            {...form.getInputProps(`items.${index}._completLabel`)}
+                                                        />
+                                                        <NumberInput
+                                                            placeholder="Prix supp."
+                                                            size="xs"
+                                                            w={100}
+                                                            min={0}
+                                                            decimalScale={2}
+                                                            fixedDecimalScale
+                                                            suffix=" €"
+                                                            {...form.getInputProps(`items.${index}._completPrice`)}
+                                                        />
+                                                    </>
+                                                )}
+                                            </Group>
+
                                             {form.values.items[index].dietaryOptions.length > 0 && (
                                                 <Stack mt="md" gap="xs">
                                                     <Text size="sm" fw={500}>Configuration des Tags :</Text>
@@ -837,11 +896,15 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                                                         if (tag === 'SPICY') {
                                                             return (
                                                                 <Card key={tag} withBorder p="xs" bg="gray.0">
-                                                                    <Group>
-                                                                        <Badge color="red">Épicé</Badge>
-                                                                        <Text size="sm" c="dimmed">
-                                                                            Le client choisira son niveau (Doux, Épicé, Très Épicé)
-                                                                        </Text>
+                                                                    <Group align="flex-end">
+                                                                        <Badge color="red" mt={4}>Épicé</Badge>
+                                                                        <Select
+                                                                            label="Niveaux proposés"
+                                                                            size="xs"
+                                                                            data={SPICE_PRESETS.map(p => ({ value: p.value, label: p.label }))}
+                                                                            style={{ flex: 1 }}
+                                                                            {...form.getInputProps(`items.${index}._spicePreset`)}
+                                                                        />
                                                                     </Group>
                                                                 </Card>
                                                             );

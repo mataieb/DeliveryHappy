@@ -18,6 +18,7 @@ type UserRow = {
     orderCount: number;
     createdAt: Date;
     currentUserId: string;
+    phoneNumber: string | null;
 };
 
 function RankBadge({ rank }: { rank: number }) {
@@ -88,6 +89,9 @@ export default function UsersClient({ users, currentUserId }: { users: UserRow[]
                     </Group>
                 </Table.Td>
                 <Table.Td>
+                    <Text size="xs" c="dimmed">{user.phoneNumber ?? '—'}</Text>
+                </Table.Td>
+                <Table.Td>
                     <Text size="xs" c="dimmed">{dayjs(user.createdAt).format('DD/MM/YYYY')}</Text>
                 </Table.Td>
                 <Table.Td>
@@ -120,6 +124,7 @@ export default function UsersClient({ users, currentUserId }: { users: UserRow[]
                         <Table.Th>Utilisateur</Table.Th>
                         <Table.Th>Rôle</Table.Th>
                         <Table.Th>Commandes</Table.Th>
+                        <Table.Th>Téléphone</Table.Th>
                         <Table.Th>Inscrit le</Table.Th>
                         <Table.Th w={60}>Action</Table.Th>
                     </Table.Tr>

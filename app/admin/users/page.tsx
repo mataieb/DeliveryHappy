@@ -32,6 +32,7 @@ export default async function AdminUsersPage() {
         orderCount: u._count.orders,
         createdAt: u.createdAt,
         currentUserId: session.user.id,
+        phoneNumber: u.phoneNumber ?? null,
     }));
 
     const totalAdmins = users.filter(u => u.role === 'ADMIN').length;

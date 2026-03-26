@@ -484,7 +484,26 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                                                 }
                                                                             });
                                                                         }
-                                                                        if (group.name.includes("épice")) optionCounts['SPICY'] = (optionCounts['SPICY'] || 0) + 1;
+                                                                        if (group.name.includes("épice")) {
+                                                                            const ids = Array.isArray(selection) ? selection : [selection];
+                                                                            ids.forEach((id: string) => {
+                                                                                const opt = group.options.find((o: any) => o.id === id);
+                                                                                if (opt) {
+                                                                                    const key = `SPICE:${opt.name}`;
+                                                                                    optionCounts[key] = (optionCounts[key] || 0) + 1;
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                        if (group.name.includes("Complète")) {
+                                                                            const ids = Array.isArray(selection) ? selection : [selection];
+                                                                            ids.forEach((id: string) => {
+                                                                                const opt = group.options.find((o: any) => o.id === id);
+                                                                                if (opt) {
+                                                                                    const key = `COMPLET:${opt.name}`;
+                                                                                    optionCounts[key] = (optionCounts[key] || 0) + 1;
+                                                                                }
+                                                                            });
+                                                                        }
                                                                     }
                                                                 });
                                                             }
@@ -512,7 +531,12 @@ export function OrdersClient({ orders }: { orders: Order[] }) {
                                                                     {optionCounts.HALAL > 0 && <Badge size="xs" variant="light" color="grape">{optionCounts.HALAL} Halal</Badge>}
                                                                     {optionCounts.GLUTEN_FREE > 0 && <Badge size="xs" variant="light" color="yellow">{optionCounts.GLUTEN_FREE} Sans Gluten</Badge>}
                                                                     {optionCounts.PROTEIN > 0 && <Badge size="xs" variant="light" color="blue">{optionCounts.PROTEIN} Protéines</Badge>}
-                                                                    {optionCounts.SPICY > 0 && <Badge size="xs" variant="light" color="red">{optionCounts.SPICY} Épicé</Badge>}
+                                                                    {Object.entries(optionCounts).filter(([k]) => k.startsWith('SPICE:')).map(([k, count]) => (
+                                                                        <Badge key={k} size="xs" variant="light" color="red">🌶 {count} {k.replace('SPICE:', '')}</Badge>
+                                                                    ))}
+                                                                    {Object.entries(optionCounts).filter(([k]) => k.startsWith('COMPLET:')).map(([k, count]) => (
+                                                                        <Badge key={k} size="xs" variant="light" color="brown">{count} {k.replace('COMPLET:', '')}</Badge>
+                                                                    ))}
                                                                 </Group>
                                                             )}
                                                         </Stack>
