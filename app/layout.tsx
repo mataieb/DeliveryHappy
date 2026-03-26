@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from '@vercel/analytics/next';
 import { Outfit } from "next/font/google"; // Premium typography
 import { ColorSchemeScript } from "@mantine/core";
 import { Providers } from "./providers";
@@ -33,6 +34,7 @@ export default function RootLayout({
           <UserNav />
           {children}
           <FloatingCart />
+          <Analytics />
         </Providers>
       </body>
     </html>
