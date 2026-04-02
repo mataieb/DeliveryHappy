@@ -26,8 +26,11 @@ model User {
   orders        Order[]
   addresses     Address[]
   dietaryPreferences DietaryOption[]
-  phoneNumber   String?
+  phoneNumber      String?
   containerBalance Int       @default(0)
+  defaultPackaging Packaging @default(CARDBOARD)
+  emailMenuWeekly  Boolean   @default(true)
+  emailPromo       Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -117,6 +120,7 @@ model MenuItem {
   ingredients String?
   category    ItemCategory @default(MAIN)
   price       Float       @default(0)
+  blocked     Boolean     @default(false) // Admin override: masque le plat sans bloquer le menu
   dietaryOptions DietaryOption[]
   spiceLevel  String?     // 'MILD', 'MEDIUM', 'HOT'
   menu        Menu        @relation(fields: [menuId], references: [id], onDelete: Cascade)

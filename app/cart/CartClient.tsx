@@ -21,6 +21,7 @@ type Props = {
     containerBalance: number;
     userPhoneNumber: string | null;
     tupperwareEnabled: boolean;
+    defaultPackaging?: 'CARDBOARD' | 'TUPPERWARE';
 };
 
 type DeliveryZone = { name: string; polygon: ZonePoint[] } | null;
@@ -33,11 +34,11 @@ function isAddressInZone(addr: Address, zone: DeliveryZone): boolean {
     return pointInPolygon(lat, lon, zone.polygon);
 }
 
-export default function CartClient({ addresses, containerBalance, tupperwareEnabled, userPhoneNumber }: Props) {
+export default function CartClient({ addresses, containerBalance, tupperwareEnabled, userPhoneNumber, defaultPackaging = 'CARDBOARD' }: Props) {
     const router = useRouter();
     const { cart, removeItem, clearCurrentCart, totalPrice } = useCart();
     const [loading, setLoading] = useState(false);
-    const [packaging, setPackaging] = useState<'CARDBOARD' | 'TUPPERWARE'>('CARDBOARD');
+    const [packaging, setPackaging] = useState<'CARDBOARD' | 'TUPPERWARE'>(defaultPackaging);
     const [returnCount, setReturnCount] = useState(containerBalance > 0 ? containerBalance : 0);
     const [notes, setNotes] = useState('');
     const [timeConstraint, setTimeConstraint] = useState('');

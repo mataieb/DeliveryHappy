@@ -9,9 +9,8 @@ export const dynamic = 'force-dynamic';
 export default async function PreferencesPage() {
     const session = await getServerSession(authOptions);
 
-    // If no session, redirect to login
     if (!session?.user?.id) {
-        redirect("/api/auth/signin"); // Or proper login page
+        redirect("/api/auth/signin");
     }
 
     const user = await prisma.user.findUnique({
@@ -20,9 +19,23 @@ export default async function PreferencesPage() {
     });
 
     if (!user) {
-        // Should not happen if session exists but user deleted
         redirect("/api/auth/signin");
     }
 
-    return <PreferencesClient user={{ ...user, hasPassword: !!user.password }} />;
+    return (
+        <PreferencesClient
+            user={{
+                name: user.name,
+                email: user.email,
+                phoneNumber: user.phoneNumber,
+                containerBalance: user.containerBalance,
+                defaultPackaging: user.defaultPackaging,
+                emailMenuWeekly: user.emailMenuWeekly,
+                emailPromo: user.emailPromo,
+                dietaryPreferences: user.dietaryPreferences,
+                addresses: user.addresses,
+                hasPassword: !!user.password,
+            }}
+        />
+    );
 }

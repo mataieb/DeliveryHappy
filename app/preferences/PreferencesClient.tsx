@@ -21,29 +21,33 @@ import {
     Loader,
     SegmentedControl,
     Badge,
+    Tabs,
+    Radio,
+    Switch,
+    ThemeIcon,
+    Divider,
 } from '@mantine/core';
 import { useDisclosure, useDebouncedValue } from '@mantine/hooks';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useSearchParams } from 'next/navigation';
-import { IconTrash, IconPlus, IconMapPin, IconDeviceFloppy, IconPencil, IconLock } from '@tabler/icons-react';
+import {
+    IconTrash, IconPlus, IconMapPin, IconDeviceFloppy, IconPencil, IconLock,
+    IconUser, IconBox, IconLeaf, IconBell,
+} from '@tabler/icons-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { updateDietaryPreferences, addAddressAction, deleteAddressAction, updateAddressAction, changePassword } from './actions';
-import { DietaryOption, Address, AddressType } from '@prisma/client';
+import {
+    updateProfileAction, updateDietaryPreferences, updatePackagingPreference,
+    updateEmailPreferences, addAddressAction, deleteAddressAction, updateAddressAction,
+    changePassword,
+} from './actions';
+import { DietaryOption, Address, AddressType, Packaging } from '@prisma/client';
 
-// BAN — Base Adresse Nationale (gratuit, sans clé, pour la France)
 const BAN_URL = 'https://api-adresse.data.gouv.fr/search/';
 
 type BanFeature = {
-    properties: {
-        id: string;
-        label: string;
-        postcode: string;
-        city: string;
-    };
-    geometry: {
-        coordinates: [number, number]; // [longitude, latitude]
-    };
+    properties: { id: string; label: string; postcode: string; city: string; };
+    geometry: { coordinates: [number, number]; };
 };
 
 async function fetchBanSuggestions(query: string): Promise<BanFeature[]> {
@@ -63,26 +67,50 @@ const DIETARY_LABELS: Record<string, string> = {
     'SPICY': 'Épicé'
 };
 
-type UserWithAddresses = {
+type UserProps = {
+    name: string | null;
     email: string;
     phoneNumber: string | null;
     containerBalance: number;
+    defaultPackaging: Packaging;
+    emailMenuWeekly: boolean;
+    emailPromo: boolean;
     dietaryPreferences: DietaryOption[];
     addresses: Address[];
     hasPassword: boolean;
 };
 
-export default function PreferencesClient({ user }: { user: UserWithAddresses }) {
+export default function PreferencesClient({ user }: { user: UserProps }) {
     const searchParams = useSearchParams();
     const onboarding = searchParams.get('onboarding');
 
-    const [dietary, setDietary] = useState<string[]>(user.dietaryPreferences);
-    const [phoneNumber, setPhoneNumber] = useState<string>(user.phoneNumber || '');
+    // Onglet actif
+    const defaultTab = onboarding ? 'info' : 'info';
 
-    const [loadingInfo, setLoadingInfo] = useState(false);
-    const [loadingPhone, setLoadingPhone] = useState(false);
+    // --- Informations personnelles ---
+    const [name, setName] = useState(user.name || '');
+    const [phoneNumber, setPhoneNumber] = useState(user.phoneNumber || '');
+    const [loadingProfile, setLoadingProfile] = useState(false);
 
-    // Password change
+    const profileDirty = name !== (user.name || '') || phoneNumber !== (user.phoneNumber || '');
+
+    const handleSaveProfile = async () => {
+        setLoadingProfile(true);
+        try {
+            const res = await updateProfileAction(name, phoneNumber);
+            if (res.success) {
+                notifications.show({ title: 'Succès', message: 'Informations mises à jour', color: 'green' });
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } catch {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de la mise à jour', color: 'red' });
+        } finally {
+            setLoadingProfile(false);
+        }
+    };
+
+    // --- Mot de passe ---
     const [pwCurrent, setPwCurrent] = useState('');
     const [pwNew, setPwNew] = useState('');
     const [pwConfirm, setPwConfirm] = useState('');
@@ -109,12 +137,62 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
         }
     }, [pwCurrent, pwNew, pwConfirm]);
 
-    // Address Modal
+    // --- Tupperwares ---
+    const [defaultPackaging, setDefaultPackaging] = useState<Packaging>(user.defaultPackaging);
+    const [loadingPackaging, setLoadingPackaging] = useState(false);
+
+    const handleSavePackaging = async (val: Packaging) => {
+        setDefaultPackaging(val);
+        setLoadingPackaging(true);
+        try {
+            const res = await updatePackagingPreference(val);
+            if (res.success) {
+                notifications.show({ title: 'Succès', message: 'Préférence d\'emballage enregistrée', color: 'green' });
+            } else {
+                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+            }
+        } catch {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de la mise à jour', color: 'red' });
+        } finally {
+            setLoadingPackaging(false);
+        }
+    };
+
+    // --- Préférences alimentaires & emails ---
+    const [dietary, setDietary] = useState<string[]>(user.dietaryPreferences);
+    const [emailMenuWeekly, setEmailMenuWeekly] = useState(user.emailMenuWeekly);
+    const [emailPromo, setEmailPromo] = useState(user.emailPromo);
+    const [loadingPrefs, setLoadingPrefs] = useState(false);
+
+    const handleSavePrefs = async () => {
+        setLoadingPrefs(true);
+        try {
+            const [dietRes, emailRes] = await Promise.all([
+                updateDietaryPreferences(dietary as DietaryOption[]),
+                updateEmailPreferences(emailMenuWeekly, emailPromo),
+            ]);
+            if (dietRes.success && emailRes.success) {
+                notifications.show({ title: 'Succès', message: 'Préférences enregistrées', color: 'green' });
+            } else {
+                notifications.show({ title: 'Erreur', message: dietRes.error || emailRes.error, color: 'red' });
+            }
+        } catch {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'enregistrement', color: 'red' });
+        } finally {
+            setLoadingPrefs(false);
+        }
+    };
+
+    const prefsDirty =
+        JSON.stringify(dietary.sort()) !== JSON.stringify([...user.dietaryPreferences].sort()) ||
+        emailMenuWeekly !== user.emailMenuWeekly ||
+        emailPromo !== user.emailPromo;
+
+    // --- Adresses ---
     const [opened, { open, close }] = useDisclosure(false);
     const [addressLoading, setAddressLoading] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
-    // Autocomplete BAN
     const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
     const [suggestions, setSuggestions] = useState<BanFeature[]>([]);
     const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -123,12 +201,7 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     const abortRef = useRef<AbortController | null>(null);
 
     const addressForm = useForm({
-        initialValues: {
-            label: '',
-            type: 'DOMICILE' as AddressType,
-            content: '',
-            details: '',
-        },
+        initialValues: { label: '', type: 'DOMICILE' as AddressType, content: '', details: '' },
         validate: {
             label: (val) => (val.length < 2 ? 'Nom trop court' : null),
             content: (val) => (val.length < 5 ? 'Adresse trop courte' : null),
@@ -138,82 +211,28 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
     const [debouncedContent] = useDebouncedValue(addressForm.values.content, 300);
 
     useEffect(() => {
-        if (hasSelectedFromDropdown) return; // Ne pas re-chercher après une sélection
-
-        if (debouncedContent.trim().length < 3) {
-            setSuggestions([]);
-            combobox.closeDropdown();
-            return;
-        }
-
+        if (hasSelectedFromDropdown) return;
+        if (debouncedContent.trim().length < 3) { setSuggestions([]); combobox.closeDropdown(); return; }
         abortRef.current?.abort();
         abortRef.current = new AbortController();
         setLoadingSuggestions(true);
-
         fetchBanSuggestions(debouncedContent).then(results => {
             setSuggestions(results);
             setLoadingSuggestions(false);
-            if (results.length > 0) combobox.openDropdown();
-            else combobox.closeDropdown();
+            if (results.length > 0) combobox.openDropdown(); else combobox.closeDropdown();
         });
     }, [debouncedContent]);
 
-    const handleSaveDietary = async () => {
-        setLoadingInfo(true);
-        try {
-            const res = await updateDietaryPreferences(dietary as DietaryOption[]);
-            if (res.success) {
-                notifications.show({ title: 'Succès', message: 'Préférences enregistrées', color: 'green' });
-            } else {
-                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
-            }
-        } catch (e) {
-            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'enregistrement', color: 'red' });
-        } finally {
-            setLoadingInfo(false);
-        }
-    };
-
-    const handleSavePhone = async () => {
-        if (!phoneNumber) return;
-        setLoadingPhone(true);
-        try {
-            // @ts-ignore
-            const { updatePhoneNumber } = await import('./actions'); // Lazy import or ensure it is imported
-            const res = await updatePhoneNumber(phoneNumber);
-            if (res.success) {
-                notifications.show({ title: 'Succès', message: 'Téléphone enregistré', color: 'green' });
-            } else {
-                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
-            }
-        } catch (e) {
-            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'enregistrement', color: 'red' });
-        } finally {
-            setLoadingPhone(false);
-        }
-    };
-
     const handleOpenNew = () => {
-        setEditingId(null);
-        addressForm.reset();
-        setSuggestions([]);
-        setAddressCoords(null);
-        setHasSelectedFromDropdown(false);
-        open();
+        setEditingId(null); addressForm.reset(); setSuggestions([]);
+        setAddressCoords(null); setHasSelectedFromDropdown(false); open();
     };
 
     const handleEdit = (addr: Address) => {
         setEditingId(addr.id);
-        addressForm.setValues({
-            label: addr.label,
-            type: addr.type,
-            content: addr.content,
-            // @ts-ignore
-            details: addr.details || '',
-        });
+        addressForm.setValues({ label: addr.label, type: addr.type, content: addr.content, details: (addr as any).details || '' });
         setSuggestions([]);
-        // @ts-ignore — lat/lon ajoutés via migration schema
-        setAddressCoords(addr.lat && addr.lon ? { lat: addr.lat, lon: addr.lon } : null);
+        setAddressCoords(addr.lat && addr.lon ? { lat: addr.lat as number, lon: addr.lon as number } : null);
         setHasSelectedFromDropdown(false);
         open();
     };
@@ -232,41 +251,17 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
         try {
             let res;
             if (editingId) {
-                res = await updateAddressAction(
-                    editingId,
-                    values.label,
-                    values.content,
-                    values.details,
-                    addressCoords?.lat,
-                    addressCoords?.lon,
-                    values.type,
-                );
+                res = await updateAddressAction(editingId, values.label, values.content, values.details, addressCoords?.lat, addressCoords?.lon, values.type);
             } else {
-                res = await addAddressAction(
-                    values.label,
-                    values.content,
-                    values.details,
-                    addressCoords?.lat,
-                    addressCoords?.lon,
-                    values.type,
-                );
+                res = await addAddressAction(values.label, values.content, values.details, addressCoords?.lat, addressCoords?.lon, values.type);
             }
-
             if (res.success) {
-                notifications.show({
-                    title: 'Succès',
-                    message: editingId ? 'Adresse mise à jour' : 'Adresse ajoutée',
-                    color: 'green'
-                });
-                close();
-                addressForm.reset();
-                setEditingId(null);
-                setAddressCoords(null);
-                setHasSelectedFromDropdown(false);
+                notifications.show({ title: 'Succès', message: editingId ? 'Adresse mise à jour' : 'Adresse ajoutée', color: 'green' });
+                close(); addressForm.reset(); setEditingId(null); setAddressCoords(null); setHasSelectedFromDropdown(false);
             } else {
                 notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
             }
-        } catch (e) {
+        } catch {
             notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'enregistrement', color: 'red' });
         } finally {
             setAddressLoading(false);
@@ -282,14 +277,14 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
             } else {
                 notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
             }
-        } catch (error) {
+        } catch {
             notifications.show({ title: 'Erreur', message: 'Erreur inconnue', color: 'red' });
         }
     };
 
     return (
         <Container size="md" py="xl">
-            <Title order={2} mb="lg">Mon Profil & Préférences</Title>
+            <Title order={2} mb="lg">Mon Profil</Title>
 
             {onboarding && (
                 <Alert title="Bienvenue !" color="blue" mb="xl">
@@ -297,159 +292,246 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                 </Alert>
             )}
 
-            <Paper withBorder p="lg" radius="md" mb="xl">
-                <Title order={4} mb="md">Informations Personnelles</Title>
-                <Stack gap="md">
-                    <TextInput
-                        label="Email"
-                        value={user.email}
-                        disabled
-                        description="Provenant de votre compte Google"
-                    />
+            <Tabs defaultValue={defaultTab}>
+                <Tabs.List mb="xl">
+                    <Tabs.Tab value="info" leftSection={<IconUser size={16} />}>Informations</Tabs.Tab>
+                    <Tabs.Tab value="addresses" leftSection={<IconMapPin size={16} />}>Mes adresses</Tabs.Tab>
+                    <Tabs.Tab value="tupperware" leftSection={<IconBox size={16} />}>Tupperwares</Tabs.Tab>
+                    <Tabs.Tab value="preferences" leftSection={<IconLeaf size={16} />}>Préférences</Tabs.Tab>
+                </Tabs.List>
 
-                    <Group align="flex-end" wrap="wrap">
-                        <TextInput
-                            label="Téléphone"
-                            placeholder="06 12 34 56 78"
-                            value={phoneNumber}
-                            onChange={(e) => setPhoneNumber(e.currentTarget.value)}
-                            style={{ flex: 1, minWidth: 200 }}
-                        />
-                        <Button
-                            onClick={handleSavePhone}
-                            loading={loadingPhone}
-                            disabled={phoneNumber === (user.phoneNumber || '')}
-                        >
-                            Enregistrer
-                        </Button>
-                    </Group>
+                {/* ───── INFORMATIONS PERSONNELLES ───── */}
+                <Tabs.Panel value="info">
+                    <Stack gap="xl">
+                        <Paper withBorder p="lg" radius="md">
+                            <Title order={4} mb="md">Informations personnelles</Title>
+                            <Stack gap="md">
+                                <TextInput
+                                    label="Prénom / Nom"
+                                    placeholder="Jean Dupont"
+                                    value={name}
+                                    onChange={(e) => setName(e.currentTarget.value)}
+                                />
+                                <TextInput
+                                    label="Email"
+                                    value={user.email}
+                                    disabled
+                                    description="Non modifiable"
+                                />
+                                <TextInput
+                                    label="Téléphone"
+                                    placeholder="06 12 34 56 78"
+                                    value={phoneNumber}
+                                    onChange={(e) => setPhoneNumber(e.currentTarget.value)}
+                                />
+                                <Group justify="flex-end">
+                                    <Button
+                                        leftSection={<IconDeviceFloppy size={16} />}
+                                        onClick={handleSaveProfile}
+                                        loading={loadingProfile}
+                                        disabled={!profileDirty}
+                                    >
+                                        Enregistrer
+                                    </Button>
+                                </Group>
+                            </Stack>
+                        </Paper>
 
-                    <Card bg="blue.0" withBorder radius="md" p="md">
-                        <Group>
-                            <Text size="xl">🍱</Text>
-                            <div>
-                                <Text fw={600}>Mes Tupperwares</Text>
-                                <Text size="sm">
-                                    En votre possession : <Text span fw={700} c="blue" size="lg">{user.containerBalance}</Text>
-                                </Text>
-                            </div>
-                        </Group>
-                    </Card>
-                </Stack>
-            </Paper>
+                        {user.hasPassword && (
+                            <Paper withBorder p="lg" radius="md">
+                                <Title order={4} mb="md">Changer le mot de passe</Title>
+                                <Stack gap="sm">
+                                    <PasswordInput
+                                        label="Mot de passe actuel"
+                                        placeholder="••••••••"
+                                        leftSection={<IconLock size={16} />}
+                                        value={pwCurrent}
+                                        onChange={(e) => setPwCurrent(e.currentTarget.value)}
+                                    />
+                                    <PasswordInput
+                                        label="Nouveau mot de passe"
+                                        placeholder="Au moins 8 caractères"
+                                        leftSection={<IconLock size={16} />}
+                                        value={pwNew}
+                                        onChange={(e) => setPwNew(e.currentTarget.value)}
+                                    />
+                                    <PasswordInput
+                                        label="Confirmer le nouveau mot de passe"
+                                        placeholder="••••••••"
+                                        leftSection={<IconLock size={16} />}
+                                        value={pwConfirm}
+                                        onChange={(e) => setPwConfirm(e.currentTarget.value)}
+                                    />
+                                    <Group justify="flex-end">
+                                        <Button
+                                            onClick={handleChangePassword}
+                                            loading={loadingPw}
+                                            disabled={!pwCurrent || !pwNew || !pwConfirm}
+                                            variant="light"
+                                        >
+                                            Mettre à jour
+                                        </Button>
+                                    </Group>
+                                </Stack>
+                            </Paper>
+                        )}
+                    </Stack>
+                </Tabs.Panel>
 
-            {user.hasPassword && (
-                <Paper withBorder p="lg" radius="md" mb="xl">
-                    <Title order={4} mb="md">Changer le mot de passe</Title>
-                    <Stack gap="sm">
-                        <PasswordInput
-                            label="Mot de passe actuel"
-                            placeholder="••••••••"
-                            leftSection={<IconLock size={16} />}
-                            value={pwCurrent}
-                            onChange={(e) => setPwCurrent(e.currentTarget.value)}
-                        />
-                        <PasswordInput
-                            label="Nouveau mot de passe"
-                            placeholder="Au moins 8 caractères"
-                            leftSection={<IconLock size={16} />}
-                            value={pwNew}
-                            onChange={(e) => setPwNew(e.currentTarget.value)}
-                        />
-                        <PasswordInput
-                            label="Confirmer le nouveau mot de passe"
-                            placeholder="••••••••"
-                            leftSection={<IconLock size={16} />}
-                            value={pwConfirm}
-                            onChange={(e) => setPwConfirm(e.currentTarget.value)}
-                        />
-                        <Group justify="flex-end">
-                            <Button
-                                onClick={handleChangePassword}
-                                loading={loadingPw}
-                                disabled={!pwCurrent || !pwNew || !pwConfirm}
-                                variant="light"
-                            >
-                                Mettre à jour
+                {/* ───── ADRESSES ───── */}
+                <Tabs.Panel value="addresses">
+                    <Paper withBorder p="lg" radius="md">
+                        <Group justify="space-between" mb="md">
+                            <Title order={4}>Mes adresses de livraison</Title>
+                            <Button leftSection={<IconPlus size={16} />} onClick={handleOpenNew} variant="light">
+                                Nouvelle adresse
                             </Button>
                         </Group>
-                    </Stack>
-                </Paper>
-            )}
 
-            <Paper withBorder p="lg" radius="md" mb="xl">
-                <Group justify="space-between" mb="md">
-                    <Title order={4}>Régime Alimentaire</Title>
-                    <Button
-                        leftSection={<IconDeviceFloppy size={16} />}
-                        onClick={handleSaveDietary}
-                        loading={loadingInfo}
-                        variant="light"
-                        disabled={JSON.stringify(dietary.sort()) === JSON.stringify(user.dietaryPreferences.sort())}
-                    >
-                        Enregistrer
-                    </Button>
-                </Group>
-                <Text size="sm" c="dimmed" mb="md">
-                    Sélectionnez vos contraintes alimentaires. Ces informations seront utilisées par votre chef préféré pour concocter les prochains menus.
-                </Text>
+                        {user.addresses.length === 0 ? (
+                            <Text c="dimmed" fs="italic">Aucune adresse enregistrée.</Text>
+                        ) : (
+                            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                                {user.addresses.map(addr => (
+                                    <Card key={addr.id} withBorder shadow="sm" radius="md">
+                                        <Group justify="space-between" align="flex-start" mb="xs">
+                                            <Group gap="xs">
+                                                <IconMapPin size={16} color="gray" />
+                                                <Text fw={600}>{addr.label}</Text>
+                                                <Badge size="xs" variant="light" color={addr.type === 'BUREAU' ? 'blue' : 'green'}>
+                                                    {addr.type === 'BUREAU' ? 'Bureau' : 'Domicile'}
+                                                </Badge>
+                                            </Group>
+                                            <Group gap={0}>
+                                                <ActionIcon color="blue" variant="subtle" onClick={() => handleEdit(addr)}>
+                                                    <IconPencil size={16} />
+                                                </ActionIcon>
+                                                <ActionIcon color="red" variant="subtle" onClick={() => handleDeleteAddress(addr.id)}>
+                                                    <IconTrash size={16} />
+                                                </ActionIcon>
+                                            </Group>
+                                        </Group>
+                                        <Text size="sm" style={{ whiteSpace: 'pre-line' }}>{addr.content}</Text>
+                                        {(addr as any).details && (
+                                            <Text size="xs" c="dimmed" mt={4}>{(addr as any).details}</Text>
+                                        )}
+                                    </Card>
+                                ))}
+                            </SimpleGrid>
+                        )}
+                    </Paper>
+                </Tabs.Panel>
 
-                <Chip.Group multiple value={dietary} onChange={setDietary}>
-                    <Group gap="xs">
-                        {Object.entries(DIETARY_LABELS).map(([key, label]) => (
-                            <Chip key={key} value={key} variant="outline" radius="sm">
-                                {label}
-                            </Chip>
-                        ))}
-                    </Group>
-                </Chip.Group>
-            </Paper>
-
-            <Paper withBorder p="lg" radius="md">
-                <Group justify="space-between" mb="md">
-                    <Title order={4}>Mes Adresses de Livraison</Title>
-                    <Button leftSection={<IconPlus size={16} />} onClick={handleOpenNew} variant="light">
-                        Nouvelle Adresse
-                    </Button>
-                </Group>
-
-                {user.addresses.length === 0 ? (
-                    <Text c="dimmed" fs="italic">Aucune adresse enregistrée.</Text>
-                ) : (
-                    <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                        {user.addresses.map(addr => (
-                            <Card key={addr.id} withBorder shadow="sm" radius="md">
-                                <Group justify="space-between" align="flex-start" mb="xs">
-                                    <Group gap="xs">
-                                        <IconMapPin size={16} color="gray" />
-                                        <Text fw={600}>{addr.label}</Text>
-                                        <Badge size="xs" variant="light" color={addr.type === 'BUREAU' ? 'blue' : 'green'}>
-                                            {addr.type === 'BUREAU' ? 'Bureau' : 'Domicile'}
-                                        </Badge>
-                                    </Group>
-                                    <Group gap={0}>
-                                        <ActionIcon color="blue" variant="subtle" onClick={() => handleEdit(addr)}>
-                                            <IconPencil size={16} />
-                                        </ActionIcon>
-                                        <ActionIcon color="red" variant="subtle" onClick={() => handleDeleteAddress(addr.id)}>
-                                            <IconTrash size={16} />
-                                        </ActionIcon>
-                                    </Group>
+                {/* ───── TUPPERWARES ───── */}
+                <Tabs.Panel value="tupperware">
+                    <Stack gap="xl">
+                        <Paper withBorder p="lg" radius="md">
+                            <Title order={4} mb="md">Mes tupperwares</Title>
+                            <Card bg="blue.0" withBorder radius="md" p="md" mb="lg">
+                                <Group>
+                                    <ThemeIcon size="xl" variant="light" color="blue" radius="md">
+                                        <IconBox size={22} />
+                                    </ThemeIcon>
+                                    <div>
+                                        <Text fw={600}>En votre possession</Text>
+                                        <Text size="sm">
+                                            <Text span fw={700} c="blue" size="xl">{user.containerBalance}</Text>
+                                            {' '}tupperware{user.containerBalance > 1 ? 's' : ''}
+                                        </Text>
+                                    </div>
                                 </Group>
-                                <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
-                                    {addr.content}
-                                </Text>
-                                {addr.details && (
-                                    <Text size="xs" c="dimmed" mt={4}>
-                                        {addr.details}
-                                    </Text>
-                                )}
                             </Card>
-                        ))}
-                    </SimpleGrid>
-                )}
-            </Paper>
 
+                            <Divider mb="lg" />
+
+                            <Title order={5} mb="xs">Emballage par défaut</Title>
+                            <Text size="sm" c="dimmed" mb="md">
+                                Ce choix sera présélectionné à chaque commande, mais vous pourrez le modifier dans le panier.
+                            </Text>
+
+                            <Radio.Group
+                                value={defaultPackaging}
+                                onChange={(val) => handleSavePackaging(val as Packaging)}
+                            >
+                                <Stack gap="sm">
+                                    <Radio
+                                        value="CARDBOARD"
+                                        label="Carton (jetable / recyclable)"
+                                        disabled={loadingPackaging}
+                                    />
+                                    <Radio
+                                        value="TUPPERWARE"
+                                        label="Tupperware (consigné)"
+                                        disabled={loadingPackaging}
+                                    />
+                                </Stack>
+                            </Radio.Group>
+
+                            {defaultPackaging === 'TUPPERWARE' && (
+                                <Alert color="orange" mt="md" title="Information caution">
+                                    Une caution de <strong>10€</strong> par tupperware sera ajoutée lors du paiement de chaque commande.
+                                    Elle vous sera remboursée à la restitution du contenant.
+                                </Alert>
+                            )}
+                        </Paper>
+                    </Stack>
+                </Tabs.Panel>
+
+                {/* ───── PRÉFÉRENCES ───── */}
+                <Tabs.Panel value="preferences">
+                    <Paper withBorder p="lg" radius="md">
+                        <Group justify="space-between" mb="md">
+                            <Title order={4}>Préférences</Title>
+                            <Button
+                                leftSection={<IconDeviceFloppy size={16} />}
+                                onClick={handleSavePrefs}
+                                loading={loadingPrefs}
+                                variant="light"
+                                disabled={!prefsDirty}
+                            >
+                                Enregistrer
+                            </Button>
+                        </Group>
+
+                        <Title order={5} mb="xs">Régime alimentaire</Title>
+                        <Text size="sm" c="dimmed" mb="md">
+                            Ces informations aident à adapter les menus proposés.
+                        </Text>
+                        <Chip.Group multiple value={dietary} onChange={setDietary}>
+                            <Group gap="xs" mb="xl">
+                                {Object.entries(DIETARY_LABELS).map(([key, label]) => (
+                                    <Chip key={key} value={key} variant="outline" radius="sm">
+                                        {label}
+                                    </Chip>
+                                ))}
+                            </Group>
+                        </Chip.Group>
+
+                        <Divider mb="lg" />
+
+                        <Title order={5} mb="xs">Notifications par email</Title>
+                        <Text size="sm" c="dimmed" mb="md">
+                            Choisissez les emails que vous souhaitez recevoir.
+                        </Text>
+                        <Stack gap="sm">
+                            <Switch
+                                label="Menu de la semaine"
+                                description="Recevez le menu chaque semaine avant l'heure limite de commande"
+                                checked={emailMenuWeekly}
+                                onChange={(e) => setEmailMenuWeekly(e.currentTarget.checked)}
+                            />
+                            <Switch
+                                label="Promos & annonces"
+                                description="Offres spéciales, nouveautés et exclusivités"
+                                checked={emailPromo}
+                                onChange={(e) => setEmailPromo(e.currentTarget.checked)}
+                            />
+                        </Stack>
+                    </Paper>
+                </Tabs.Panel>
+            </Tabs>
+
+            {/* Modal adresse */}
             <Modal opened={opened} onClose={close} title={editingId ? "Modifier l'adresse" : "Ajouter une adresse"}>
                 <form onSubmit={addressForm.onSubmit(handleSaveAddress)}>
                     <Stack>
@@ -480,23 +562,17 @@ export default function PreferencesClient({ user }: { user: UserWithAddresses })
                                         setHasSelectedFromDropdown(false);
                                         setAddressCoords(null);
                                     }}
-                                    onFocus={() => {
-                                        if (suggestions.length > 0) combobox.openDropdown();
-                                    }}
+                                    onFocus={() => { if (suggestions.length > 0) combobox.openDropdown(); }}
                                     onBlur={() => combobox.closeDropdown()}
                                 />
                             </Combobox.Target>
-
                             <Combobox.Dropdown>
                                 <Combobox.Options>
                                     {suggestions.map((feature) => (
                                         <Combobox.Option
                                             key={feature.properties.id}
                                             value={feature.properties.label}
-                                            onMouseDown={(e) => {
-                                                e.preventDefault(); // évite le blur avant le clic
-                                                handleSelectSuggestion(feature);
-                                            }}
+                                            onMouseDown={(e) => { e.preventDefault(); handleSelectSuggestion(feature); }}
                                         >
                                             {feature.properties.label}
                                         </Combobox.Option>
