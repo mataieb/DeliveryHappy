@@ -185,7 +185,7 @@ export async function createOrderAction(menuId: string, items: OrderedItem[], de
 
         // Revalidate admin dashboard and potential user history
         revalidatePath('/admin/orders');
-        return { success: true };
+        return { success: true as const };
     } catch (e) {
         console.error(e);
         return { success: false, error: "Erreur lors de la création de la commande" };

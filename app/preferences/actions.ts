@@ -124,7 +124,7 @@ export async function addAddressAction(label: string, content: string, details?:
     if (!label || !content) return { success: false, error: "Champs requis" };
 
     try {
-        await prisma.address.create({
+        const address = await prisma.address.create({
             data: {
                 userId: session.user.id,
                 label,
@@ -136,7 +136,7 @@ export async function addAddressAction(label: string, content: string, details?:
             },
         });
         revalidatePath('/preferences');
-        return { success: true };
+        return { success: true, address };
     } catch (error) {
         console.error(error);
         return { success: false, error: "Erreur lors de la création" };
