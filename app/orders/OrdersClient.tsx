@@ -11,8 +11,12 @@ import {
     Button,
     Tooltip,
     Modal,
+    ThemeIcon,
+    SimpleGrid,
+    Stepper,
+    Tabs,
 } from '@mantine/core';
-import { IconStarFilled, IconStar, IconX } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconX, IconShoppingBag, IconCurrencyEuro, IconClock, IconHistory, IconLoader } from '@tabler/icons-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import { useState } from 'react';
@@ -21,8 +25,10 @@ import { cancelOrderAction } from './actions';
 import { notifications } from '@mantine/notifications';
 import { isOrderingOpen } from '@/lib/ordering';
 
+dayjs.locale('fr');
+
 const STATUS_LABELS: Record<string, string> = {
-    PENDING: 'En attente',
+    PENDING: 'En attente de validation',
     IN_KITCHEN: 'En préparation',
     IN_DELIVERY: 'En livraison',
     DELIVERED: 'Livrée',
@@ -38,6 +44,17 @@ const STATUS_COLORS: Record<string, string> = {
     PAID: 'teal',
     CANCELLED: 'red',
 };
+
+// Étapes du workflow de livraison
+const DELIVERY_STEPS = ['PENDING', 'IN_KITCHEN', 'IN_DELIVERY', 'DELIVERED'];
+
+function getStepperActive(status: string): number {
+    const idx = DELIVERY_STEPS.indexOf(status);
+    // active=n → étapes 0..n-1 cochées, étape n = courante
+    return idx === -1 ? 0 : idx;
+}
+
+const ACTIVE_STATUSES = ['PENDING', 'IN_KITCHEN', 'IN_DELIVERY', 'DELIVERED'];
 
 type OrderItemForDisplay = {
     id: string;
@@ -88,6 +105,167 @@ function StarDisplay({ rating }: { rating: number }) {
     );
 }
 
+function DateBadge({ date }: { date: string | Date }) {
+    const menuDay = dayjs(date).startOf('day');
+    const today = dayjs().startOf('day');
+    const diff = menuDay.diff(today, 'day');
+    if (diff === 0) return <Badge color="green" size="sm">Aujourd'hui</Badge>;
+    if (diff === 1) return <Badge color="blue" size="sm">Demain</Badge>;
+    if (diff > 1) return <Badge color="gray" size="sm">Dans {diff} jours</Badge>;
+    return null;
+}
+
+function OrderCard({
+    order,
+    isActive,
+    onReview,
+    onCancel,
+}: {
+    order: OrderForDisplay;
+    isActive: boolean;
+    onReview: (id: string) => void;
+    onCancel: (id: string) => void;
+}) {
+    const canReview = ['DELIVERED', 'PAID'].includes(order.status) && !order.review;
+    // Annulation possible uniquement si PENDING et avant 21h la veille (J-1)
+    const canCancel = order.status === 'PENDING' && isOrderingOpen(new Date(order.menu.date));
+
+    return (
+        <Card withBorder shadow="sm" radius="md">
+            <Group justify="space-between" mb="xs" wrap="wrap">
+                <Group wrap="wrap" gap="xs">
+                    <Text fw={700} style={{ textTransform: 'capitalize' }}>
+                        {dayjs(order.menu.date).format('dddd D MMMM')}
+                    </Text>
+                    {isActive && <DateBadge date={order.menu.date} />}
+                    <Badge color={STATUS_COLORS[order.status] ?? 'gray'}>
+                        {STATUS_LABELS[order.status] ?? order.status}
+                    </Badge>
+                </Group>
+                <Text fw={700} c="blue">{order.total.toFixed(2)} €</Text>
+            </Group>
+
+            {/* Timeline pour les commandes actives (hors annulé) */}
+            {isActive && order.status !== 'CANCELLED' && (
+                <Stepper
+                    active={getStepperActive(order.status)}
+                    size="xs"
+                    mb="md"
+                    styles={{
+                        stepLabel: { fontSize: 10 },
+                        stepDescription: { fontSize: 9 },
+                    }}
+                >
+                    <Stepper.Step label="Reçue" description="En attente" />
+                    <Stepper.Step label="En cuisine" description="En préparation" />
+                    <Stepper.Step label="En livraison" />
+                    <Stepper.Step label="Livrée" />
+                </Stepper>
+            )}
+
+            <Group gap="xs" mb="md" wrap="wrap">
+                <Text size="sm" c="dimmed">📍 {order.deliveryAddress}</Text>
+                <Badge variant="outline" color="gray" size="sm">
+                    {order.packaging === 'TUPPERWARE' ? '🍱 Tupperware' : '📦 Carton'}
+                </Badge>
+                {order.isReturningContainer && (
+                    <Badge variant="outline" color="orange" size="sm">
+                        ↩️ Retour ({order.containersReturnedCount})
+                    </Badge>
+                )}
+            </Group>
+
+            <Stack gap="xs">
+                {order.items.map(orderItem => {
+                    const itemReviewRating = order.review?.itemRatings.find(r => r.orderItemId === orderItem.id);
+                    return (
+                        <Group key={orderItem.id} justify="space-between" align="flex-start">
+                            <div>
+                                <Text size="sm" fw={500}>{orderItem.item.name}</Text>
+                                <Group gap={4} mt={4}>
+                                    {orderItem.selectedOption && (
+                                        <Badge size="xs" variant="light" color="gray">{orderItem.selectedOption}</Badge>
+                                    )}
+                                    {orderItem.selectedOptions && orderItem.item.optionGroups && (
+                                        <>
+                                            {Object.entries(orderItem.selectedOptions as Record<string, unknown>).map(([groupId, selection]) => {
+                                                const group = orderItem.item.optionGroups.find(g => g.id === groupId);
+                                                if (!group) return null;
+                                                const ids = Array.isArray(selection) ? selection : [selection];
+                                                const options = ids
+                                                    .map((id) => group.options.find(o => o.id === id))
+                                                    .filter((o): o is { id: string; name: string } => !!o);
+                                                if (options.length === 0) return null;
+                                                return options.map(opt => {
+                                                    let color = 'gray';
+                                                    const lowerName = opt.name.toLowerCase();
+                                                    const lowerGroup = group.name.toLowerCase();
+                                                    if (lowerName.includes('végé')) color = 'green';
+                                                    else if (lowerName.includes('végan')) color = 'teal';
+                                                    else if (lowerName.includes('halal')) color = 'grape';
+                                                    else if (lowerName.includes('gluten') || lowerGroup.includes('gluten')) color = 'yellow';
+                                                    else if (lowerName.includes('épicé') || lowerGroup.includes('épice')) color = 'red';
+                                                    else if (lowerGroup.includes('protéine')) color = 'blue';
+                                                    return <Badge key={opt.id} size="xs" variant="light" color={color}>{opt.name}</Badge>;
+                                                });
+                                            })}
+                                        </>
+                                    )}
+                                </Group>
+                            </div>
+                            <Group gap="xs" align="center">
+                                {itemReviewRating && <StarDisplay rating={itemReviewRating.rating} />}
+                                <Text size="sm">{orderItem.item.price} €</Text>
+                            </Group>
+                        </Group>
+                    );
+                })}
+            </Stack>
+
+            {(order.notes || order.dietaryOption) && (
+                <Card bg="gray.0" mt="md" p="xs" radius="sm">
+                    {order.dietaryOption && <Text size="xs"><strong>Option:</strong> {order.dietaryOption}</Text>}
+                    {order.notes && <Text size="xs"><strong>Notes:</strong> {order.notes}</Text>}
+                </Card>
+            )}
+
+            {order.review?.comment && (
+                <Card bg="yellow.0" mt="md" p="xs" radius="sm" withBorder>
+                    <Group gap="xs" mb={4}>
+                        <IconStarFilled size={14} style={{ color: 'var(--mantine-color-yellow-6)' }} />
+                        <Text size="xs" fw={600}>Votre avis</Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" fs="italic">&quot;{order.review.comment}&quot;</Text>
+                </Card>
+            )}
+
+            <Group justify="space-between" mt="md">
+                {canCancel ? (
+                    <Button size="xs" variant="subtle" color="red" leftSection={<IconX size={14} />} onClick={() => onCancel(order.id)}>
+                        Annuler la commande
+                    </Button>
+                ) : order.status === 'CANCELLED' ? (
+                    <Badge color="red" variant="light">Annulée</Badge>
+                ) : (
+                    <span />
+                )}
+
+                {canReview ? (
+                    <Button size="xs" variant="light" color="yellow" leftSection={<IconStarFilled size={14} />} onClick={() => onReview(order.id)}>
+                        Noter cette commande
+                    </Button>
+                ) : order.review ? (
+                    <Tooltip label="Vous avez déjà noté cette commande" withArrow>
+                        <Badge variant="light" color="yellow" leftSection={<IconStarFilled size={12} />} style={{ cursor: 'default' }}>
+                            Commande notée
+                        </Badge>
+                    </Tooltip>
+                ) : null}
+            </Group>
+        </Card>
+    );
+}
+
 export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) {
     const [reviewOrderId, setReviewOrderId] = useState<string | null>(null);
     const [cancelOrderId, setCancelOrderId] = useState<string | null>(null);
@@ -96,12 +274,17 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
     const activeOrder = reviewOrderId ? orders.find(o => o.id === reviewOrderId) : null;
     const orderToCancel = cancelOrderId ? orders.find(o => o.id === cancelOrderId) : null;
 
-    const canReview = (order: OrderForDisplay) =>
-        ['DELIVERED', 'PAID'].includes(order.status) && !order.review;
+    const activeOrders = orders
+        .filter(o => ACTIVE_STATUSES.includes(o.status))
+        .sort((a, b) => dayjs(a.menu.date).unix() - dayjs(b.menu.date).unix());
 
-    // L'utilisateur peut annuler seulement si PENDING et si la deadline n'est pas passée
-    const canCancel = (order: OrderForDisplay) =>
-        order.status === 'PENDING' && isOrderingOpen(new Date(order.menu.date));
+    const pastOrders = orders
+        .filter(o => !ACTIVE_STATUSES.includes(o.status))
+        .sort((a, b) => dayjs(b.menu.date).unix() - dayjs(a.menu.date).unix());
+
+    const totalSpent = pastOrders
+        .filter(o => o.status === 'PAID')
+        .reduce((sum, o) => sum + o.total, 0);
 
     const handleConfirmCancel = async () => {
         if (!cancelOrderId) return;
@@ -109,17 +292,9 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
         try {
             const res = await cancelOrderAction(cancelOrderId);
             if (res.success) {
-                notifications.show({
-                    title: 'Commande annulée',
-                    message: 'Votre commande a bien été annulée.',
-                    color: 'green',
-                });
+                notifications.show({ title: 'Commande annulée', message: 'Votre commande a bien été annulée.', color: 'green' });
             } else {
-                notifications.show({
-                    title: 'Erreur',
-                    message: res.error ?? 'Une erreur est survenue.',
-                    color: 'red',
-                });
+                notifications.show({ title: 'Erreur', message: res.error ?? 'Une erreur est survenue.', color: 'red' });
             }
         } finally {
             setCancelling(false);
@@ -129,178 +304,104 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
 
     return (
         <Container size="md" py="xl">
-            <Title mb="xl">Mes Commandes</Title>
+            <Title mb="lg">Mes Commandes</Title>
 
             {orders.length === 0 ? (
                 <Text c="dimmed">Vous n&apos;avez pas encore passé de commande.</Text>
             ) : (
-                <Stack>
-                    {orders.map(order => (
-                        <Card key={order.id} withBorder shadow="sm" radius="md">
-                            <Group justify="space-between" mb="xs" wrap="wrap">
-                                <Group wrap="wrap">
-                                    <Text fw={700}>
-                                        Commande du {dayjs(order.menu.date).locale('fr').format('DD/MM/YYYY')}
-                                    </Text>
-                                    <Badge color={STATUS_COLORS[order.status] ?? 'gray'}>
-                                        {STATUS_LABELS[order.status] ?? order.status}
-                                    </Badge>
-                                </Group>
-                                <Text fw={700} c="blue">{order.total.toFixed(2)} €</Text>
-                            </Group>
-
-                            <Group gap="xs" mb="md">
-                                <Text size="sm" c="dimmed">Livraison à : {order.deliveryAddress}</Text>
-                                <Badge variant="outline" color="gray" size="sm">
-                                    {order.packaging === 'TUPPERWARE' ? '🍱 Tupperware' : '📦 Carton'}
-                                </Badge>
-                                {order.isReturningContainer && (
-                                    <Badge variant="outline" color="orange" size="sm">
-                                        ↩️ Retour Tupperware ({order.containersReturnedCount})
-                                    </Badge>
-                                )}
-                            </Group>
-
-                            <Stack gap="xs">
-                                {order.items.map(orderItem => {
-                                    const itemReviewRating = order.review?.itemRatings.find(
-                                        r => r.orderItemId === orderItem.id
-                                    );
-                                    return (
-                                        <Group key={orderItem.id} justify="space-between" align="flex-start">
-                                            <div>
-                                                <Text size="sm" fw={500}>{orderItem.item.name}</Text>
-
-                                                <Group gap={4} mt={4}>
-                                                    {/* Legacy Option */}
-                                                    {orderItem.selectedOption && (
-                                                        <Badge size="xs" variant="light" color={
-                                                            orderItem.selectedOption === 'VEGETARIAN' ? 'green' :
-                                                                orderItem.selectedOption === 'VEGAN' ? 'teal' :
-                                                                    orderItem.selectedOption === 'HALAL' ? 'grape' :
-                                                                        orderItem.selectedOption === 'GLUTEN_FREE' ? 'yellow' :
-                                                                            orderItem.selectedOption === 'SPICY' ? 'red' : 'gray'
-                                                        }>
-                                                            {orderItem.selectedOption === 'VEGETARIAN' ? 'Végétarien' :
-                                                                orderItem.selectedOption === 'VEGAN' ? 'Végan' :
-                                                                    orderItem.selectedOption === 'HALAL' ? 'Halal' :
-                                                                        orderItem.selectedOption === 'GLUTEN_FREE' ? 'Sans Gluten' :
-                                                                            orderItem.selectedOption === 'SPICY' ? 'Épicé' :
-                                                                                orderItem.selectedOption}
-                                                        </Badge>
-                                                    )}
-
-                                                    {/* Complex Options */}
-                                                    {orderItem.selectedOptions && orderItem.item.optionGroups && (
-                                                        <>
-                                                            {Object.entries(orderItem.selectedOptions as Record<string, unknown>).map(([groupId, selection]) => {
-                                                                const group = orderItem.item.optionGroups.find(g => g.id === groupId);
-                                                                if (!group) return null;
-
-                                                                const ids = Array.isArray(selection) ? selection : [selection];
-                                                                const options = ids
-                                                                    .map((id) => group.options.find(o => o.id === id))
-                                                                    .filter((o): o is { id: string; name: string } => !!o);
-
-                                                                if (options.length === 0) return null;
-
-                                                                return options.map(opt => {
-                                                                    let color = 'gray';
-                                                                    const lowerName = opt.name.toLowerCase();
-                                                                    const lowerGroup = group.name.toLowerCase();
-
-                                                                    if (lowerName.includes('végé')) color = 'green';
-                                                                    else if (lowerName.includes('végan')) color = 'teal';
-                                                                    else if (lowerName.includes('halal')) color = 'grape';
-                                                                    else if (lowerName.includes('gluten') || lowerGroup.includes('gluten')) color = 'yellow';
-                                                                    else if (lowerName.includes('épicé') || lowerGroup.includes('épice')) color = 'red';
-                                                                    else if (lowerGroup.includes('protéine')) color = 'blue';
-
-                                                                    return (
-                                                                        <Badge key={opt.id} size="xs" variant="light" color={color}>
-                                                                            {opt.name}
-                                                                        </Badge>
-                                                                    );
-                                                                });
-                                                            })}
-                                                        </>
-                                                    )}
-                                                </Group>
-                                            </div>
-                                            <Group gap="xs" align="center">
-                                                {itemReviewRating && (
-                                                    <StarDisplay rating={itemReviewRating.rating} />
-                                                )}
-                                                <Text size="sm">{orderItem.item.price} €</Text>
-                                            </Group>
-                                        </Group>
-                                    );
-                                })}
-                            </Stack>
-
-                            {(order.notes || order.dietaryOption) && (
-                                <Card bg="gray.0" mt="md" p="xs" radius="sm">
-                                    {order.dietaryOption && <Text size="xs"><strong>Option:</strong> {order.dietaryOption}</Text>}
-                                    {order.notes && <Text size="xs"><strong>Notes:</strong> {order.notes}</Text>}
-                                </Card>
-                            )}
-
-                            {/* Review section */}
-                            {order.review && order.review.comment && (
-                                <Card bg="yellow.0" mt="md" p="xs" radius="sm" withBorder>
-                                    <Group gap="xs" mb={4}>
-                                        <IconStarFilled size={14} style={{ color: 'var(--mantine-color-yellow-6)' }} />
-                                        <Text size="xs" fw={600}>Votre avis</Text>
-                                    </Group>
-                                    <Text size="xs" c="dimmed" fs="italic">&quot;{order.review.comment}&quot;</Text>
-                                </Card>
-                            )}
-
-                            {/* Actions: cancel + review */}
-                            <Group justify="space-between" mt="md">
-                                {/* Annulation */}
-                                {canCancel(order) ? (
-                                    <Button
-                                        size="xs"
-                                        variant="subtle"
-                                        color="red"
-                                        leftSection={<IconX size={14} />}
-                                        onClick={() => setCancelOrderId(order.id)}
-                                    >
-                                        Annuler la commande
-                                    </Button>
-                                ) : order.status === 'CANCELLED' ? (
-                                    <Badge color="red" variant="light">Annulée</Badge>
-                                ) : (
-                                    <span />
-                                )}
-
-                                {/* Avis */}
-                                {canReview(order) ? (
-                                    <Button
-                                        size="xs"
-                                        variant="light"
-                                        color="yellow"
-                                        leftSection={<IconStarFilled size={14} />}
-                                        onClick={() => setReviewOrderId(order.id)}
-                                    >
-                                        Noter cette commande
-                                    </Button>
-                                ) : order.review ? (
-                                    <Tooltip label="Vous avez déjà noté cette commande" withArrow>
-                                        <Badge
-                                            variant="light"
-                                            color="yellow"
-                                            leftSection={<IconStarFilled size={12} />}
-                                            style={{ cursor: 'default' }}
-                                        >
-                                            Commande notée
-                                        </Badge>
-                                    </Tooltip>
-                                ) : null}
+                <Stack gap="lg">
+                    {/* Stats */}
+                    <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="sm">
+                        <Card withBorder p="sm" radius="md">
+                            <Group gap="xs">
+                                <ThemeIcon variant="light" color="blue" size="md">
+                                    <IconShoppingBag size={16} />
+                                </ThemeIcon>
+                                <div>
+                                    <Text size="xs" c="dimmed">Commandes</Text>
+                                    <Text fw={700}>{orders.filter(o => o.status !== 'CANCELLED').length}</Text>
+                                </div>
                             </Group>
                         </Card>
-                    ))}
+                        <Card withBorder p="sm" radius="md">
+                            <Group gap="xs">
+                                <ThemeIcon variant="light" color="teal" size="md">
+                                    <IconCurrencyEuro size={16} />
+                                </ThemeIcon>
+                                <div>
+                                    <Text size="xs" c="dimmed">Total dépensé</Text>
+                                    <Text fw={700}>{totalSpent.toFixed(2)} €</Text>
+                                </div>
+                            </Group>
+                        </Card>
+                        <Card withBorder p="sm" radius="md">
+                            <Group gap="xs">
+                                <ThemeIcon variant="light" color="orange" size="md">
+                                    <IconClock size={16} />
+                                </ThemeIcon>
+                                <div>
+                                    <Text size="xs" c="dimmed">En cours</Text>
+                                    <Text fw={700}>{activeOrders.length}</Text>
+                                </div>
+                            </Group>
+                        </Card>
+                    </SimpleGrid>
+
+                    {/* Onglets */}
+                    <Tabs defaultValue={activeOrders.length > 0 ? 'active' : 'history'}>
+                        <Tabs.List mb="md">
+                            <Tabs.Tab
+                                value="active"
+                                leftSection={<IconLoader size={16} />}
+                                rightSection={activeOrders.length > 0 ? (
+                                    <Badge size="xs" color="orange" variant="filled" circle>
+                                        {activeOrders.length}
+                                    </Badge>
+                                ) : undefined}
+                            >
+                                En cours
+                            </Tabs.Tab>
+                            <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>
+                                Historique
+                            </Tabs.Tab>
+                        </Tabs.List>
+
+                        <Tabs.Panel value="active">
+                            {activeOrders.length === 0 ? (
+                                <Text c="dimmed" fs="italic">Aucune commande en cours.</Text>
+                            ) : (
+                                <Stack gap="sm">
+                                    {activeOrders.map(order => (
+                                        <OrderCard
+                                            key={order.id}
+                                            order={order}
+                                            isActive
+                                            onReview={setReviewOrderId}
+                                            onCancel={setCancelOrderId}
+                                        />
+                                    ))}
+                                </Stack>
+                            )}
+                        </Tabs.Panel>
+
+                        <Tabs.Panel value="history">
+                            {pastOrders.length === 0 ? (
+                                <Text c="dimmed" fs="italic">Aucune commande dans l'historique.</Text>
+                            ) : (
+                                <Stack gap="sm">
+                                    {pastOrders.map(order => (
+                                        <OrderCard
+                                            key={order.id}
+                                            order={order}
+                                            isActive={false}
+                                            onReview={setReviewOrderId}
+                                            onCancel={setCancelOrderId}
+                                        />
+                                    ))}
+                                </Stack>
+                            )}
+                        </Tabs.Panel>
+                    </Tabs>
                 </Stack>
             )}
 
@@ -311,15 +412,11 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
                     orderId={activeOrder.id}
                     orderItems={activeOrder.items.map(i => ({
                         id: i.id,
-                        item: {
-                            name: i.item.name,
-                            category: i.item.category,
-                        }
+                        item: { name: i.item.name, category: i.item.category },
                     }))}
                 />
             )}
 
-            {/* Modale de confirmation d'annulation */}
             <Modal
                 opened={!!cancelOrderId}
                 onClose={() => setCancelOrderId(null)}
@@ -331,28 +428,16 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
                     <Text size="sm">
                         Êtes-vous sûr de vouloir annuler votre commande du{' '}
                         <strong>
-                            {orderToCancel
-                                ? dayjs(orderToCancel.menu.date).locale('fr').format('dddd D MMMM')
-                                : ''}
+                            {orderToCancel ? dayjs(orderToCancel.menu.date).format('dddd D MMMM') : ''}
                         </strong>{' '}?
                         <br /><br />
                         Cette action est <strong>irréversible</strong>.
                     </Text>
                     <Group justify="flex-end" gap="sm">
-                        <Button
-                            variant="subtle"
-                            color="gray"
-                            onClick={() => setCancelOrderId(null)}
-                            disabled={cancelling}
-                        >
+                        <Button variant="subtle" color="gray" onClick={() => setCancelOrderId(null)} disabled={cancelling}>
                             Garder ma commande
                         </Button>
-                        <Button
-                            color="red"
-                            leftSection={<IconX size={14} />}
-                            loading={cancelling}
-                            onClick={handleConfirmCancel}
-                        >
+                        <Button color="red" leftSection={<IconX size={14} />} loading={cancelling} onClick={handleConfirmCancel}>
                             Oui, annuler
                         </Button>
                     </Group>
