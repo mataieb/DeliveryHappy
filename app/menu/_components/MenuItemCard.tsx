@@ -32,7 +32,7 @@ interface MenuItemCardProps {
     isBlocked?: boolean;
 }
 
-const CATEGORY_CONFIG: Record<ItemCategory, { label: string; bg: string; icon: React.ReactNode }> = {
+export const CATEGORY_CONFIG: Record<ItemCategory, { label: string; bg: string; icon: React.ReactNode }> = {
     MAIN:    { label: 'Plat',    bg: '#228be6', icon: <IconToolsKitchen2 size={22} color="white" /> },
     STARTER: { label: 'Entrée',  bg: '#12b886', icon: <IconSalad size={22} color="white" /> },
     DESSERT: { label: 'Dessert', bg: '#e64980', icon: <IconCake size={22} color="white" /> },
@@ -49,7 +49,6 @@ const DIETARY_CONFIG: Partial<Record<DietaryOption, { label: string; color: stri
 
 export default function MenuItemCard({ item, onAdd, canOrder = true, isBlocked = false }: MenuItemCardProps) {
     const config = CATEGORY_CONFIG[item.category] ?? { label: item.category, bg: '#868e96', icon: null };
-    const hasOptions = item.optionGroups && item.optionGroups.length > 0;
 
     return (
         <div style={{
@@ -62,22 +61,13 @@ export default function MenuItemCard({ item, onAdd, canOrder = true, isBlocked =
             opacity: isBlocked ? 0.6 : 1,
             height: '100%',
         }}>
-            {/* Bande gauche colorée avec icône */}
-            <div style={{
-                width: 56,
-                flexShrink: 0,
-                background: config.bg,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-            }}>
-                {config.icon}
-            </div>
+            {/* Trait coloré gauche */}
+            <div style={{ width: 5, flexShrink: 0, background: config.bg }} />
 
             {/* Contenu */}
             <div style={{
                 flex: 1,
-                padding: '12px 14px',
+                padding: '10px 12px',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 4,
@@ -94,14 +84,19 @@ export default function MenuItemCard({ item, onAdd, canOrder = true, isBlocked =
                 </Group>
 
                 {/* Description */}
-                <Text size="xs" c="dimmed" lineClamp={2} style={{ flex: 1 }}>
-                    {item.description || <i>Aucune description</i>}
+                <Text size="xs" c="dimmed" lineClamp={2}>
+                    {item.description}
                 </Text>
 
-                {/* Tags diététiques */}
-                {item.dietaryOptions && item.dietaryOptions.length > 0 && (
-                    <Group gap={4} mt={2}>
-                        {item.dietaryOptions.map((opt) => {
+                <div style={{ flex: 1 }} />
+
+                {/* Options + tags diététiques */}
+                {((item.optionGroups && item.optionGroups.length > 0) || (item.dietaryOptions && item.dietaryOptions.length > 0)) && (
+                    <Group gap={4} wrap="wrap" align="center">
+                        {item.optionGroups && item.optionGroups.length > 0 && (
+                            <Text size="xs" c="dimmed">{item.optionGroups.length > 1 ? 'Options :' : 'Option :'}</Text>
+                        )}
+                        {item.dietaryOptions && item.dietaryOptions.map((opt) => {
                             const d = DIETARY_CONFIG[opt];
                             if (!d) return null;
                             return (
@@ -113,16 +108,11 @@ export default function MenuItemCard({ item, onAdd, canOrder = true, isBlocked =
                     </Group>
                 )}
 
-                {/* Prix + bouton */}
-                <Group justify="space-between" align="center" mt="xs">
-                    <div>
-                        <Text fw={800} size="md" style={{ color: config.bg, lineHeight: 1 }}>
-                            {item.price.toFixed(2)} €
-                        </Text>
-                        {hasOptions && (
-                            <Text size="xs" c="dimmed" mt={2}>+ options</Text>
-                        )}
-                    </div>
+                {/* Prix + bouton ajouter */}
+                <Group justify="space-between" align="center" mt={2}>
+                    <Text fw={800} size="md" style={{ color: config.bg, lineHeight: 1 }}>
+                        {item.price.toFixed(2)} €
+                    </Text>
                     {onAdd && canOrder && !isBlocked && (
                         <Button
                             size="xs"

@@ -1,13 +1,13 @@
 "use client";
 
-import { Menu } from "@prisma/client";
+import { Menu, ItemCategory } from "@prisma/client";
 import { SimpleGrid, Text, Group, Badge, Alert, Button, Modal, Stack } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 
 import dayjs from "dayjs";
 import 'dayjs/locale/fr';
 import { useState } from "react";
-import MenuItemCard, { MenuItemWithOptions } from "./MenuItemCard";
+import MenuItemCard, { MenuItemWithOptions, CATEGORY_CONFIG } from "./MenuItemCard";
 import ItemOptionsModal from "./ItemOptionsModal";
 import { isOrderingOpen, orderingDeadline } from "@/lib/ordering";
 import { useCart } from "@/app/_components/CartContext";
@@ -30,6 +30,15 @@ const DAY_SHORT: Record<string, string> = {
     lundi: 'Lun', mardi: 'Mar', mercredi: 'Mer', jeudi: 'Jeu', vendredi: 'Ven', samedi: 'Sam', dimanche: 'Dim',
 };
 
+const CATEGORY_ORDER: ItemCategory[] = ['STARTER', 'MAIN', 'DESSERT', 'DRINK'];
+
+const SECTION_LABELS: Record<ItemCategory, string> = {
+    STARTER: 'Entrées',
+    MAIN: 'Plats',
+    DESSERT: 'Desserts',
+    DRINK: 'Boissons',
+};
+
 export default function MenuList({ menus, zoneStatusByMenuId, validAddressLabelsByMenuId }: MenuListProps) {
     const { cart, addItem, switchCart } = useCart();
     const [activeMenuId, setActiveMenuId] = useState<string>(menus[0]?.id ?? '');
@@ -41,7 +50,22 @@ export default function MenuList({ menus, zoneStatusByMenuId, validAddressLabels
     const [switchOpened, { open: openSwitch, close: closeSwitch }] = useDisclosure(false);
 
     if (!menus || menus.length === 0) {
-        return <Text c="dimmed">Aucun menu disponible pour cette semaine.</Text>;
+        return (
+            <div style={{
+                padding: '60px 20px',
+                textAlign: 'center',
+                border: '2px dashed var(--mantine-color-gray-3)',
+                borderRadius: 'var(--mantine-radius-lg)',
+                background: 'var(--mantine-color-gray-0)',
+            }}>
+                <Text size="xl" fw={700} mb={12}>
+                    Menus en cours d&apos;élaboration
+                </Text>
+                <Text size="sm" c="dimmed" mb={8} style={{ maxWidth: 440, margin: '0 auto' }}>
+                    Les menus de la semaine sont en cours de préparation. Vous recevrez un e-mail dès que les commandes seront ouvertes.
+                </Text>
+            </div>
+        );
     }
 
     const isPastDate = (date: Date) => dayjs(date).isBefore(dayjs().startOf('day'));
@@ -248,7 +272,7 @@ export default function MenuList({ menus, zoneStatusByMenuId, validAddressLabels
                         )}
                         {isZoneBlocked && !isPast && (
                             <Alert icon={<IconMapPinOff size={16} />} color="orange" variant="light" mb="md">
-                                La livraison n&apos;est pas disponible dans votre zone pour ce jour.
+                                La livraison n'est pas disponible dans votre zone pour ce jour.
                                 Revenez un autre jour ou mettez à jour vos adresses dans vos <strong>préférences</strong>.
                             </Alert>
                         )}
@@ -264,26 +288,88 @@ export default function MenuList({ menus, zoneStatusByMenuId, validAddressLabels
                         )}
 
                         {menu.items.length === 0 ? (
-                            <Text c="dimmed">Aucun plat disponible pour ce jour.</Text>
+                            <div style={{
+                                padding: '40px 20px',
+                                textAlign: 'center',
+                                border: '1px dashed var(--mantine-color-gray-3)',
+                                borderRadius: 'var(--mantine-radius-md)',
+                                background: 'var(--mantine-color-gray-0)',
+                            }}>
+                                <Text size="lg" fw={600} mb={8}>
+                                    {isPast ? 'Menu passé' : 'Aucun plat disponible'}
+                                </Text>
+                                <Text size="sm" c="dimmed" mb={16}>
+                                    {isPast
+                                        ? 'Ce menu est déjà passé. Consultez les menus à venir.'
+                                        : locked
+                                            ? 'Les commandes pour ce jour ont été bloquées par l\'administrateur.'
+                                            : open
+                                                ? 'L\'administrateur n\'a pas encore créé de menu pour ce jour.'
+                                                : 'Les commandes pour ce jour sont fermées. Commandez pour un autre jour.'}
+                                </Text>
+                                {!open && !isPast && (
+                                    <Text size="sm" fw={500} c="dimmed">
+                                        Deadline : {deadline}
+                                    </Text>
+                                )}
+                            </div>
                         ) : (
-                            <SimpleGrid
-                                cols={{ base: 1, sm: 2 }}
-                                spacing="sm"
-                                style={{ opacity: isPast ? 0.5 : 1 }}
-                            >
-                                {menu.items.map(item => {
-                                    const itemBlocked = !!(item as any).blocked;
-                                    return (
-                                        <MenuItemCard
-                                            key={item.id}
-                                            item={item}
-                                            canOrder={open && !isZoneBlocked}
-                                            isBlocked={itemBlocked}
-                                            onAdd={(open && !isZoneBlocked && !itemBlocked) ? (i) => handleAddItem(menu.id, menuDateStr, i) : undefined}
-                                        />
-                                    );
-                                })}
-                            </SimpleGrid>
+                            <div style={{ opacity: isPast ? 0.5 : 1 }}>
+                                {CATEGORY_ORDER
+                                    .filter(cat => menu.items.some(item => item.category === cat))
+                                    .map((cat, sectionIndex, visibleCats) => {
+                                        const config = CATEGORY_CONFIG[cat];
+                                        const catItems = menu.items.filter(item => item.category === cat);
+                                        const isLast = sectionIndex === visibleCats.length - 1;
+                                        return (
+                                            <div key={cat} style={{ display: 'flex', gap: 16 }}>
+                                                {/* Fil d'ariane */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 40, flexShrink: 0 }}>
+                                                    <div style={{
+                                                        width: 40, height: 40,
+                                                        borderRadius: '50%',
+                                                        background: config.bg,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        flexShrink: 0,
+                                                        boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                                                    }}>
+                                                        {config.icon}
+                                                    </div>
+                                                    {!isLast && (
+                                                        <div style={{
+                                                            flex: 1,
+                                                            width: 2,
+                                                            background: 'var(--mantine-color-gray-3)',
+                                                            minHeight: 20,
+                                                            margin: '4px 0',
+                                                        }} />
+                                                    )}
+                                                </div>
+                                                {/* Contenu de la section */}
+                                                <div style={{ flex: 1, paddingBottom: isLast ? 0 : 24 }}>
+                                                    <Text fw={700} size="sm" mb="sm" style={{ color: config.bg, paddingTop: 8 }}>
+                                                        {SECTION_LABELS[cat]}
+                                                    </Text>
+                                                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                                                        {catItems.map(item => {
+                                                            const itemBlocked = !!(item as any).blocked;
+                                                            return (
+                                                                <MenuItemCard
+                                                                    key={item.id}
+                                                                    item={item}
+                                                                    canOrder={open && !isZoneBlocked}
+                                                                    isBlocked={itemBlocked}
+                                                                    onAdd={(open && !isZoneBlocked && !itemBlocked) ? (i) => handleAddItem(menu.id, menuDateStr, i) : undefined}
+                                                                />
+                                                            );
+                                                        })}
+                                                    </SimpleGrid>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                }
+                            </div>
                         )}
                     </>
                 );
