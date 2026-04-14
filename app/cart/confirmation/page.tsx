@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 export default function OrderConfirmationPage() {
     return (
-        <Container size="sm" py="xl">
+        <Container size="lg" pt="xs" pb="xl">
             <Stack align="center" gap="xl" py="xl">
                 <ThemeIcon size={100} radius={100} variant="light" color="green">
                     <IconCheck size={55} />

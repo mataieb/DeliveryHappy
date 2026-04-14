@@ -76,7 +76,7 @@ export default async function MenuPage() {
     }
 
     return (
-        <Container size="lg" pt="md" pb={{ base: 120, sm: 100 }}>
+        <Container size="lg" pt="xs" pb={{ base: 120, sm: 100 }}>
             <Title order={3} mb="md">Menus</Title>
             <MenuList menus={menus} zoneStatusByMenuId={zoneStatusByMenuId} validAddressLabelsByMenuId={validAddressLabelsByMenuId} />
         </Container>

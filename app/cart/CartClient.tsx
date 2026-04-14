@@ -126,7 +126,7 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
     // Empty cart
     if (!cart || cart.items.length === 0) {
         return (
-            <Container size="sm" py="xl">
+            <Container size="lg" pt="md" pb="xl">
                 <Stack align="center" gap="xl" py="xl">
                     <ThemeIcon size={80} radius={80} variant="light" color="gray">
                         <IconShoppingCartOff size={40} />
@@ -284,9 +284,9 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
                 </Stack>
             </form>
         </Modal>
-        <Container size="sm" py="xl">
+        <Container size="lg" pt="md" pb={{ base: 80, sm: 'xl' }}>
             <Group mb="lg" justify="space-between" align="center">
-                <Title order={2}>Mon Panier</Title>
+                <Title order={3}>Mon Panier</Title>
                 <Button component={Link} href="/menu" variant="subtle" leftSection={<IconArrowLeft size={16} />}>
                     Continuer mes achats
                 </Button>

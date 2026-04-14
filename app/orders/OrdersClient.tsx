@@ -316,8 +316,8 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
     };
 
     return (
-        <Container size="md" py="xl">
-            <Title order={3} mb="sm">Mes Commandes</Title>
+        <Container size="lg" pt="xs" pb="xl">
+            <Title order={3} mb="md">Mes Commandes</Title>
 
             {orders.length === 0 ? (
                 <Text c="dimmed">Vous n&apos;avez pas encore passé de commande.</Text>

@@ -283,8 +283,8 @@ export default function PreferencesClient({ user }: { user: UserProps }) {
     };
 
     return (
-        <Container size="md" py="xl">
-            <Title order={2} mb="lg">Mon Profil</Title>
+        <Container size="lg" pt="xs" pb="xl">
+            <Title order={3} mb="md">Mon Profil</Title>
 
             {onboarding && (
                 <Alert title="Bienvenue !" color="blue" mb="xl">
