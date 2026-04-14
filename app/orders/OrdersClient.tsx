@@ -11,12 +11,9 @@ import {
     Button,
     Tooltip,
     Modal,
-    ThemeIcon,
-    SimpleGrid,
-    Stepper,
     Tabs,
 } from '@mantine/core';
-import { IconStarFilled, IconStar, IconX, IconShoppingBag, IconCurrencyEuro, IconClock, IconHistory, IconLoader } from '@tabler/icons-react';
+import { IconStarFilled, IconStar, IconX, IconHistory, IconLoader } from '@tabler/icons-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import { useState } from 'react';
@@ -138,30 +135,52 @@ function OrderCard({
                         {dayjs(order.menu.date).format('dddd D MMMM')}
                     </Text>
                     {isActive && <DateBadge date={order.menu.date} />}
-                    <Badge color={STATUS_COLORS[order.status] ?? 'gray'}>
-                        {STATUS_LABELS[order.status] ?? order.status}
-                    </Badge>
+                    {!isActive && (
+                        <Badge color={STATUS_COLORS[order.status] ?? 'gray'} variant="light">
+                            {STATUS_LABELS[order.status] ?? order.status}
+                        </Badge>
+                    )}
                 </Group>
                 <Text fw={700} c="blue">{order.total.toFixed(2)} €</Text>
             </Group>
 
             {/* Timeline pour les commandes actives (hors annulé) */}
-            {isActive && order.status !== 'CANCELLED' && (
-                <Stepper
-                    active={getStepperActive(order.status)}
-                    size="xs"
-                    mb="md"
-                    styles={{
-                        stepLabel: { fontSize: 10 },
-                        stepDescription: { fontSize: 9 },
-                    }}
-                >
-                    <Stepper.Step label="Reçue" description="En attente" />
-                    <Stepper.Step label="En cuisine" description="En préparation" />
-                    <Stepper.Step label="En livraison" />
-                    <Stepper.Step label="Livrée" />
-                </Stepper>
-            )}
+            {isActive && order.status !== 'CANCELLED' && (() => {
+                const stepLabels = ['Reçue', 'En cuisine', 'En livraison', 'Livrée'];
+                const activeIdx = getStepperActive(order.status);
+                return (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 12 }}>
+                        {DELIVERY_STEPS.map((step, i) => {
+                            const done = i < activeIdx;
+                            const active = i === activeIdx;
+                            return (
+                                <div key={step} style={{ display: 'flex', alignItems: 'center', flex: i < DELIVERY_STEPS.length - 1 ? 1 : 'none' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                                        <div style={{
+                                            width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                                            backgroundColor: done || active ? '#4c6ef5' : 'var(--mantine-color-gray-2)',
+                                            color: done || active ? 'white' : 'var(--mantine-color-gray-5)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: 10, fontWeight: 700,
+                                        }}>
+                                            {done ? '✓' : i + 1}
+                                        </div>
+                                        <Text fw={active ? 600 : 400} c={active ? 'indigo' : 'dimmed'} style={{ whiteSpace: 'nowrap', fontSize: 10 }}>
+                                            {stepLabels[i]}
+                                        </Text>
+                                    </div>
+                                    {i < DELIVERY_STEPS.length - 1 && (
+                                        <div style={{
+                                            flex: 1, height: 2, marginBottom: 18, marginLeft: 4, marginRight: 4,
+                                            backgroundColor: done ? '#4c6ef5' : 'var(--mantine-color-gray-2)',
+                                        }} />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
 
             <Group gap="xs" mb="md" wrap="wrap">
                 <Text size="sm" c="dimmed">📍 {order.deliveryAddress}</Text>
@@ -244,8 +263,6 @@ function OrderCard({
                     <Button size="xs" variant="subtle" color="red" leftSection={<IconX size={14} />} onClick={() => onCancel(order.id)}>
                         Annuler la commande
                     </Button>
-                ) : order.status === 'CANCELLED' ? (
-                    <Badge color="red" variant="light">Annulée</Badge>
                 ) : (
                     <span />
                 )}
@@ -282,10 +299,6 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
         .filter(o => !ACTIVE_STATUSES.includes(o.status))
         .sort((a, b) => dayjs(b.menu.date).unix() - dayjs(a.menu.date).unix());
 
-    const totalSpent = pastOrders
-        .filter(o => o.status === 'PAID')
-        .reduce((sum, o) => sum + o.total, 0);
-
     const handleConfirmCancel = async () => {
         if (!cancelOrderId) return;
         setCancelling(true);
@@ -304,49 +317,12 @@ export default function OrdersClient({ orders }: { orders: OrderForDisplay[] }) 
 
     return (
         <Container size="md" py="xl">
-            <Title mb="lg">Mes Commandes</Title>
+            <Title order={3} mb="sm">Mes Commandes</Title>
 
             {orders.length === 0 ? (
                 <Text c="dimmed">Vous n&apos;avez pas encore passé de commande.</Text>
             ) : (
                 <Stack gap="lg">
-                    {/* Stats */}
-                    <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="sm">
-                        <Card withBorder p="sm" radius="md">
-                            <Group gap="xs">
-                                <ThemeIcon variant="light" color="blue" size="md">
-                                    <IconShoppingBag size={16} />
-                                </ThemeIcon>
-                                <div>
-                                    <Text size="xs" c="dimmed">Commandes</Text>
-                                    <Text fw={700}>{orders.filter(o => o.status !== 'CANCELLED').length}</Text>
-                                </div>
-                            </Group>
-                        </Card>
-                        <Card withBorder p="sm" radius="md">
-                            <Group gap="xs">
-                                <ThemeIcon variant="light" color="teal" size="md">
-                                    <IconCurrencyEuro size={16} />
-                                </ThemeIcon>
-                                <div>
-                                    <Text size="xs" c="dimmed">Total dépensé</Text>
-                                    <Text fw={700}>{totalSpent.toFixed(2)} €</Text>
-                                </div>
-                            </Group>
-                        </Card>
-                        <Card withBorder p="sm" radius="md">
-                            <Group gap="xs">
-                                <ThemeIcon variant="light" color="orange" size="md">
-                                    <IconClock size={16} />
-                                </ThemeIcon>
-                                <div>
-                                    <Text size="xs" c="dimmed">En cours</Text>
-                                    <Text fw={700}>{activeOrders.length}</Text>
-                                </div>
-                            </Group>
-                        </Card>
-                    </SimpleGrid>
-
                     {/* Onglets */}
                     <Tabs defaultValue={activeOrders.length > 0 ? 'active' : 'history'}>
                         <Tabs.List mb="md">
