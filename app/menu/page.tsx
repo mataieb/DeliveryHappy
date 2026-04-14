@@ -26,7 +26,7 @@ export default async function MenuPage() {
 
     const today = dayjs();
     const startOfWeek = today.startOf('week').add(1, 'day').toDate();
-    const endOfWeek = today.endOf('week').add(1, 'day').toDate();
+    const endOfWeek = today.endOf('week').add(8, 'day').toDate(); // 2 semaines
 
     const menus = await prisma.menu.findMany({
         where: { date: { gte: startOfWeek, lte: endOfWeek } },
@@ -76,8 +76,8 @@ export default async function MenuPage() {
     }
 
     return (
-        <Container size="lg" py="xl">
-            <Title mb="xl">Menu de la semaine</Title>
+        <Container size="lg" pt="xs" pb={{ base: 120, sm: 100 }}>
+            <Title order={3} mb="md">Menus</Title>
             <MenuList menus={menus} zoneStatusByMenuId={zoneStatusByMenuId} validAddressLabelsByMenuId={validAddressLabelsByMenuId} />
         </Container>
     );

@@ -130,12 +130,7 @@ export default function ItemOptionsModal({ item, opened, onClose, onConfirm }: I
         <Modal
             opened={opened}
             onClose={handleClose}
-            title={
-                <Group gap="xs">
-                    <Text fw={700} size="lg">{item.name}</Text>
-                    <Badge variant="light" color="blue">{previewPrice.toFixed(2)} €</Badge>
-                </Group>
-            }
+            title={<Text fw={700} size="lg">{item.name}</Text>}
             size="md"
             centered
         >

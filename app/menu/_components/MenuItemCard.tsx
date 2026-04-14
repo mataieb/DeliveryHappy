@@ -1,10 +1,9 @@
 "use client";
 
 import { MenuItem as MenuItemType, ItemCategory, DietaryOption } from "@prisma/client";
-import { Card, Text, Badge, Button, Group, rem } from "@mantine/core";
-import { IconLeaf, IconPepper, IconDisabled, IconShoppingCartPlus } from "@tabler/icons-react";
+import { Text, Badge, Button, Group, rem } from "@mantine/core";
+import { IconLeaf, IconPepper, IconDisabled, IconShoppingCartPlus, IconSalad, IconCake, IconGlass, IconToolsKitchen2 } from "@tabler/icons-react";
 
-// Extended type with optionGroups
 type OptionItem = {
     id: string;
     name: string;
@@ -30,113 +29,103 @@ interface MenuItemCardProps {
     item: MenuItemWithOptions;
     onAdd?: (item: MenuItemWithOptions) => void;
     canOrder?: boolean;
+    isBlocked?: boolean;
 }
 
-export default function MenuItemCard({ item, onAdd, canOrder = true }: MenuItemCardProps) {
+export const CATEGORY_CONFIG: Record<ItemCategory, { label: string; bg: string; icon: React.ReactNode }> = {
+    MAIN:    { label: 'Plat',    bg: '#228be6', icon: <IconToolsKitchen2 size={22} color="white" /> },
+    STARTER: { label: 'Entrée',  bg: '#12b886', icon: <IconSalad size={22} color="white" /> },
+    DESSERT: { label: 'Dessert', bg: '#e64980', icon: <IconCake size={22} color="white" /> },
+    DRINK:   { label: 'Boisson', bg: '#f59f00', icon: <IconGlass size={22} color="white" /> },
+};
 
-    const getBadgeColor = (cat: ItemCategory) => {
-        switch (cat) {
-            case 'MAIN': return 'blue';
-            case 'STARTER': return 'green';
-            case 'DESSERT': return 'pink';
-            case 'DRINK': return 'yellow';
-            default: return 'gray';
-        }
-    };
+const DIETARY_CONFIG: Partial<Record<DietaryOption, { label: string; color: string; icon: React.ReactNode }>> = {
+    VEGETARIAN: { label: 'Végétarien', color: 'green',  icon: <IconLeaf style={{ width: rem(11), height: rem(11) }} /> },
+    VEGAN:      { label: 'Vegan',      color: 'teal',   icon: <IconLeaf style={{ width: rem(11), height: rem(11) }} /> },
+    GLUTEN_FREE:{ label: 'Sans gluten',color: 'orange', icon: <IconDisabled style={{ width: rem(11), height: rem(11) }} /> },
+    SPICY:      { label: 'Épicé',      color: 'red',    icon: <IconPepper style={{ width: rem(11), height: rem(11) }} /> },
+    HALAL:      { label: 'Halal',      color: 'grape',  icon: <Text size="xs" fw={800} lh={1}>H</Text> },
+};
 
-    const getCategoryLabel = (cat: ItemCategory) => {
-        switch (cat) {
-            case 'MAIN': return 'Plat';
-            case 'STARTER': return 'Entrée';
-            case 'DESSERT': return 'Dessert';
-            case 'DRINK': return 'Boisson';
-            default: return cat;
-        }
-    };
-
-    const getDietaryIcon = (option: DietaryOption) => {
-        const style = { width: rem(16), height: rem(16) };
-        switch (option) {
-            case 'VEGETARIAN': return <IconLeaf style={style} />;
-            case 'VEGAN': return <IconLeaf style={{ ...style, color: 'green' }} />;
-            case 'GLUTEN_FREE': return <IconDisabled style={style} />;
-            case 'SPICY': return <IconPepper style={style} />;
-            case 'HALAL': return <Text size="xs" fw={700}>H</Text>;
-            default: return null;
-        }
-    };
-
-    const getDietaryLabel = (option: DietaryOption) => {
-        switch (option) {
-            case 'VEGETARIAN': return 'Végétarien';
-            case 'VEGAN': return 'Vegan';
-            case 'GLUTEN_FREE': return 'Sans Gluten';
-            case 'SPICY': return 'Épicé';
-            case 'HALAL': return 'Halal';
-            default: return option;
-        }
-    };
-
-    const getDietaryColor = (option: DietaryOption) => {
-        switch (option) {
-            case 'VEGETARIAN': return 'green';
-            case 'VEGAN': return 'teal';
-            case 'GLUTEN_FREE': return 'orange';
-            case 'SPICY': return 'red';
-            case 'HALAL': return 'grape';
-            default: return 'gray';
-        }
-    };
-
-    const hasOptions = item.optionGroups && item.optionGroups.length > 0;
+export default function MenuItemCard({ item, onAdd, canOrder = true, isBlocked = false }: MenuItemCardProps) {
+    const config = CATEGORY_CONFIG[item.category] ?? { label: item.category, bg: '#868e96', icon: null };
 
     return (
-        <Card shadow="sm" padding="lg" radius="md" withBorder style={{ display: 'flex', flexDirection: 'column' }}>
-            <Group justify="space-between" mt="md" mb="xs">
-                <Text fw={500}>{item.name}</Text>
-                <Badge color={getBadgeColor(item.category)}>{getCategoryLabel(item.category)}</Badge>
-            </Group>
+        <div style={{
+            display: 'flex',
+            borderRadius: 'var(--mantine-radius-md)',
+            overflow: 'hidden',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+            background: 'white',
+            border: '1px solid var(--mantine-color-gray-2)',
+            opacity: isBlocked ? 0.6 : 1,
+            height: '100%',
+        }}>
+            {/* Trait coloré gauche */}
+            <div style={{ width: 5, flexShrink: 0, background: config.bg }} />
 
-            {item.dietaryOptions && item.dietaryOptions.length > 0 && (
-                <Group gap={5} mb="xs">
-                    {item.dietaryOptions.map((option) => (
-                        <Badge
-                            key={option}
-                            variant="light"
-                            color={getDietaryColor(option)}
-                            size="sm"
-                            leftSection={getDietaryIcon(option)}
-                        >
-                            {getDietaryLabel(option)}
-                        </Badge>
-                    ))}
+            {/* Contenu */}
+            <div style={{
+                flex: 1,
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+                minWidth: 0,
+            }}>
+                {/* Nom + badge épuisé */}
+                <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+                    <Text fw={700} size="sm" lh={1.3} style={{ flex: 1, minWidth: 0 }}>
+                        {item.name}
+                    </Text>
+                    {isBlocked && (
+                        <Badge color="red" variant="filled" size="xs" style={{ flexShrink: 0 }}>Épuisé</Badge>
+                    )}
                 </Group>
-            )}
 
-            <Text size="sm" c="dimmed" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {item.description}
-            </Text>
-
-            {hasOptions && (
-                <Text size="xs" c="dimmed" mt="xs" fs="italic">
-                    🔧 Options disponibles
+                {/* Description */}
+                <Text size="xs" c="dimmed" lineClamp={2}>
+                    {item.description}
                 </Text>
-            )}
 
-            <Group justify="space-between" mt="md" align="center">
-                <Text fw={700} size="lg">{item.price.toFixed(2)} €</Text>
-                {onAdd && canOrder && (
-                    <Button
-                        size="xs"
-                        variant="light"
-                        color="indigo"
-                        leftSection={<IconShoppingCartPlus size={14} />}
-                        onClick={() => onAdd(item)}
-                    >
-                        Ajouter
-                    </Button>
+                <div style={{ flex: 1 }} />
+
+                {/* Options + tags diététiques */}
+                {((item.optionGroups && item.optionGroups.length > 0) || (item.dietaryOptions && item.dietaryOptions.length > 0)) && (
+                    <Group gap={4} wrap="wrap" align="center">
+                        {item.optionGroups && item.optionGroups.length > 0 && (
+                            <Text size="xs" c="dimmed">{item.optionGroups.length > 1 ? 'Options :' : 'Option :'}</Text>
+                        )}
+                        {item.dietaryOptions && item.dietaryOptions.map((opt) => {
+                            const d = DIETARY_CONFIG[opt];
+                            if (!d) return null;
+                            return (
+                                <Badge key={opt} color={d.color} variant="light" size="xs" leftSection={d.icon}>
+                                    {d.label}
+                                </Badge>
+                            );
+                        })}
+                    </Group>
                 )}
-            </Group>
-        </Card>
+
+                {/* Prix + bouton ajouter */}
+                <Group justify="space-between" align="center" mt={2}>
+                    <Text fw={800} size="md" style={{ color: config.bg, lineHeight: 1 }}>
+                        {item.price.toFixed(2)} €
+                    </Text>
+                    {onAdd && canOrder && !isBlocked && (
+                        <Button
+                            size="xs"
+                            style={{ backgroundColor: config.bg, border: 'none' }}
+                            leftSection={<IconShoppingCartPlus size={13} />}
+                            onClick={() => onAdd(item)}
+                            radius="md"
+                        >
+                            Ajouter
+                        </Button>
+                    )}
+                </Group>
+            </div>
+        </div>
     );
 }

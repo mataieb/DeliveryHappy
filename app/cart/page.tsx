@@ -21,7 +21,6 @@ export default async function CartPage() {
 
     if (!user) redirect("/api/auth/signin");
 
-    // @ts-ignore
     const currentBalance = user.containerBalance || 0;
 
     return (
@@ -30,6 +29,7 @@ export default async function CartPage() {
             containerBalance={currentBalance}
             userPhoneNumber={user.phoneNumber}
             tupperwareEnabled={settings.tupperwareEnabled}
+            defaultPackaging={user.defaultPackaging}
         />
     );
 }

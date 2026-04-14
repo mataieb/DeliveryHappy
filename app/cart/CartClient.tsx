@@ -2,25 +2,49 @@
 
 import {
     Container, Title, Text, Button, Group, Stack, Card, Radio, Divider, Badge,
-    Alert, Textarea, NumberInput, ActionIcon, Anchor, ThemeIcon
+    Alert, Textarea, NumberInput, ActionIcon, Anchor, ThemeIcon, Modal,
+    TextInput, Combobox, useCombobox, Loader, SegmentedControl,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { createOrderAction, getMenuDeliveryZoneAction } from '../order/actions';
-import { Address } from '@prisma/client';
-import { useState, useEffect } from 'react';
+import { addAddressAction } from '../preferences/actions';
+import { Address, AddressType } from '@prisma/client';
+import { useState, useEffect, useRef } from 'react';
+import { useForm } from '@mantine/form';
+import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { IconAlertCircle, IconArrowLeft, IconShoppingCartOff, IconTrash, IconCheck, IconMapPinOff } from '@tabler/icons-react';
+import {
+    IconAlertCircle, IconArrowLeft, IconShoppingCartOff, IconTrash, IconCheck,
+    IconMapPinOff, IconPlus, IconArrowRight, IconCreditCard,
+} from '@tabler/icons-react';
 import { useCart } from '@/app/_components/CartContext';
 import { pointInPolygon, type ZonePoint } from '@/lib/geo';
+
+const BAN_URL = 'https://api-adresse.data.gouv.fr/search/';
+
+type BanFeature = {
+    properties: { id: string; label: string; postcode: string; city: string };
+    geometry: { coordinates: [number, number] };
+};
+
+async function fetchBanSuggestions(query: string): Promise<BanFeature[]> {
+    if (query.trim().length < 3) return [];
+    const params = new URLSearchParams({ q: query, limit: '6', autocomplete: '1' });
+    const res = await fetch(`${BAN_URL}?${params}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.features ?? [];
+}
 
 type Props = {
     addresses: Address[];
     containerBalance: number;
     userPhoneNumber: string | null;
     tupperwareEnabled: boolean;
+    defaultPackaging?: 'CARDBOARD' | 'TUPPERWARE';
 };
 
 type DeliveryZone = { name: string; polygon: ZonePoint[] } | null;
@@ -29,43 +53,80 @@ function isAddressInZone(addr: Address, zone: DeliveryZone): boolean {
     if (!zone) return true;
     const lat = (addr as any).lat as number | null;
     const lon = (addr as any).lon as number | null;
-    if (!lat || !lon) return true; // Pas de coords → on laisse passer (ancienne adresse)
+    if (!lat || !lon) return true;
     return pointInPolygon(lat, lon, zone.polygon);
 }
 
-export default function CartClient({ addresses, containerBalance, tupperwareEnabled, userPhoneNumber }: Props) {
+export default function CartClient({ addresses: initialAddresses, containerBalance, tupperwareEnabled, userPhoneNumber, defaultPackaging = 'CARDBOARD' }: Props) {
     const router = useRouter();
     const { cart, removeItem, clearCurrentCart, totalPrice } = useCart();
+
+    const isMobile = useMediaQuery('(max-width: 768px)');
+    const [activeStep, setActiveStep] = useState(0);
+    const [mobileSubStep, setMobileSubStep] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [packaging, setPackaging] = useState<'CARDBOARD' | 'TUPPERWARE'>('CARDBOARD');
-    const [returnCount, setReturnCount] = useState(containerBalance > 0 ? containerBalance : 0);
+
+    // Step 0 — Récap + notes
     const [notes, setNotes] = useState('');
     const [timeConstraint, setTimeConstraint] = useState('');
+
+    // Step 1 — Adresse + contenant
+    const [addresses, setAddresses] = useState<Address[]>(initialAddresses);
+    const [addressId, setAddressId] = useState('');
+    const [packaging, setPackaging] = useState<'CARDBOARD' | 'TUPPERWARE'>(defaultPackaging);
+    const [returnCount, setReturnCount] = useState(containerBalance > 0 ? containerBalance : 0);
     const [deliveryZone, setDeliveryZone] = useState<DeliveryZone>(null);
 
-    // Charger la zone du menu dès que le cart est connu
+    // Inline add address
+    const [addAddrOpened, { open: openAddAddr, close: closeAddAddr }] = useDisclosure(false);
+    const [addAddrLoading, setAddAddrLoading] = useState(false);
+    const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
+    const [suggestions, setSuggestions] = useState<BanFeature[]>([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+    const [addrCoords, setAddrCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const [hasSelectedFromDropdown, setHasSelectedFromDropdown] = useState(false);
+    const abortRef = useRef<AbortController | null>(null);
+
+    const addrForm = useForm({
+        initialValues: { label: '', type: 'DOMICILE' as AddressType, content: '', details: '' },
+        validate: {
+            label: (v) => (v.length < 2 ? 'Nom trop court' : null),
+            content: (v) => (v.length < 5 ? 'Adresse trop courte' : null),
+        },
+    });
+
+    const [debouncedContent] = useDebouncedValue(addrForm.values.content, 300);
+
+    useEffect(() => {
+        if (hasSelectedFromDropdown) return;
+        if (debouncedContent.trim().length < 3) { setSuggestions([]); combobox.closeDropdown(); return; }
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
+        setLoadingSuggestions(true);
+        fetchBanSuggestions(debouncedContent).then(results => {
+            setSuggestions(results);
+            setLoadingSuggestions(false);
+            if (results.length > 0) combobox.openDropdown(); else combobox.closeDropdown();
+        });
+    }, [debouncedContent]);
+
     useEffect(() => {
         if (!cart?.menuId) return;
         getMenuDeliveryZoneAction(cart.menuId).then(setDeliveryZone);
     }, [cart?.menuId]);
 
-    // Pré-sélectionner la première adresse valide quand la zone est connue
     useEffect(() => {
         const firstValid = addresses.find(a => isAddressInZone(a, deliveryZone));
         setAddressId(firstValid?.id ?? (addresses[0]?.id ?? ''));
     }, [deliveryZone, addresses]);
 
-    // Adresses valides vs hors zone
     const validAddresses = addresses.filter(a => isAddressInZone(a, deliveryZone));
     const hasAnyValidAddress = validAddresses.length > 0;
 
-    // Sélectionner la première adresse valide par défaut
-    const [addressId, setAddressId] = useState('');
-
-    // Empty cart state
+    // Empty cart
     if (!cart || cart.items.length === 0) {
         return (
-            <Container size="sm" py="xl">
+            <Container size="lg" pt="md" pb="xl">
                 <Stack align="center" gap="xl" py="xl">
                     <ThemeIcon size={80} radius={80} variant="light" color="gray">
                         <IconShoppingCartOff size={40} />
@@ -84,229 +145,281 @@ export default function CartClient({ addresses, containerBalance, tupperwareEnab
 
     const menuDateFormatted = dayjs(cart.menuDate).locale('fr').format('dddd D MMMM YYYY');
 
+    const handleAddAddress = async (values: typeof addrForm.values) => {
+        setAddAddrLoading(true);
+        try {
+            const res = await addAddressAction(values.label, values.content, values.details, addrCoords?.lat, addrCoords?.lon, values.type);
+            if (res.success && res.address) {
+                setAddresses(prev => [...prev, res.address as Address]);
+                setAddressId(res.address.id);
+                notifications.show({ title: 'Adresse ajoutée', message: 'Elle a été enregistrée dans votre profil.', color: 'green' });
+                addrForm.reset();
+                setAddrCoords(null);
+                setSuggestions([]);
+                setHasSelectedFromDropdown(false);
+                closeAddAddr();
+            } else {
+                notifications.show({ title: 'Erreur', message: (res as any).error ?? 'Erreur inconnue', color: 'red' });
+            }
+        } catch {
+            notifications.show({ title: 'Erreur', message: 'Erreur lors de l\'ajout', color: 'red' });
+        } finally {
+            setAddAddrLoading(false);
+        }
+    };
+
     const handleSubmit = async () => {
         setLoading(true);
-
         try {
             if (!userPhoneNumber) {
-                notifications.show({
-                    title: 'Profil incomplet',
-                    message: 'Veuillez renseigner votre numéro de téléphone dans vos préférences.',
-                    color: 'red',
-                    autoClose: 5000
-                });
-                setLoading(false);
+                notifications.show({ title: 'Profil incomplet', message: 'Renseignez votre téléphone dans vos préférences.', color: 'red' });
                 setTimeout(() => router.push('/preferences'), 2000);
                 return;
             }
-
             if (!addressId) {
-                notifications.show({ title: 'Attention', message: 'Veuillez choisir une adresse de livraison', color: 'red' });
-                setLoading(false);
+                notifications.show({ title: 'Attention', message: 'Choisissez une adresse de livraison', color: 'red' });
                 return;
             }
-
             const address = addresses.find(a => a.id === addressId);
-            if (!address) { setLoading(false); return; }
+            if (!address) return;
 
-            // @ts-ignore
-            const fullAddress = `[${address.label}] ${address.content}${address.details ? `\n(Complément: ${address.details})` : ''}`;
+            const fullAddress = `[${address.label}] ${address.content}${(address as any).details ? `\n(Complément: ${(address as any).details})` : ''}`;
+            const items = cart.items.map(ci => ({ id: ci.menuItemId, selectedOptions: ci.selectedOptionsRaw }));
+            const fullNotes = timeConstraint ? `${notes ? notes + '\n' : ''}⏰ Contrainte horaire : ${timeConstraint}` : notes;
 
-            const items = cart.items.map(cartItem => ({
-                id: cartItem.menuItemId,
-                selectedOptions: cartItem.selectedOptionsRaw,
-            }));
-
-            const fullNotes = timeConstraint
-                ? `${notes ? notes + '\n' : ''}⏰ Contrainte horaire : ${timeConstraint}`
-                : notes;
-
-            // @ts-ignore
             const res = await createOrderAction(cart.menuId, items, fullAddress, packaging, returnCount, fullNotes, undefined);
 
             if (res.success) {
                 clearCurrentCart();
-                notifications.show({ title: 'Commande validée !', message: 'Bon appétit ! 🍽️', color: 'green' });
-                router.push('/orders');
+                router.push('/cart/confirmation');
             } else {
-                notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+                notifications.show({ title: 'Erreur', message: (res as any).error, color: 'red' });
             }
-        } catch (err) {
-            console.error(err);
+        } catch {
             notifications.show({ title: 'Erreur', message: 'Une erreur est survenue.', color: 'red' });
         } finally {
             setLoading(false);
         }
     };
 
+    const canAdvanceStep0 = cart.items.length > 0;
+    const canAdvanceStep1 = !!addressId && hasAnyValidAddress;
+
+    const handleCloseAddAddr = () => {
+        addrForm.reset();
+        setAddrCoords(null);
+        setSuggestions([]);
+        setHasSelectedFromDropdown(false);
+        closeAddAddr();
+    };
+
     return (
-        <Container size="sm" py="xl">
-            <Group mb="xl" justify="space-between" align="center">
-                <div>
-                    <Title order={2}>Mon Panier</Title>
-                    <Text size="sm" c="dimmed">{menuDateFormatted}</Text>
-                </div>
-                <Button
-                    component={Link}
-                    href="/menu"
-                    variant="subtle"
-                    leftSection={<IconArrowLeft size={16} />}
-                >
+        <>
+        <Modal opened={addAddrOpened} onClose={handleCloseAddAddr} title="Ajouter une adresse" centered size="md">
+            <form onSubmit={addrForm.onSubmit(handleAddAddress)}>
+                <Stack gap="sm">
+                    <SegmentedControl
+                        data={[
+                            { label: '🏠 Domicile', value: 'DOMICILE' },
+                            { label: '🏢 Bureau', value: 'BUREAU' },
+                        ]}
+                        {...addrForm.getInputProps('type')}
+                    />
+                    <TextInput
+                        label="Nom"
+                        placeholder="Chez moi, Bureau..."
+                        withAsterisk
+                        {...addrForm.getInputProps('label')}
+                    />
+                    <Combobox store={combobox} onOptionSubmit={() => {}}>
+                        <Combobox.Target>
+                            <TextInput
+                                label="Adresse"
+                                placeholder="32 rue de Rivoli, Paris..."
+                                withAsterisk
+                                rightSection={loadingSuggestions ? <Loader size="xs" /> : null}
+                                {...addrForm.getInputProps('content')}
+                                onChange={(e) => {
+                                    addrForm.setFieldValue('content', e.currentTarget.value);
+                                    setHasSelectedFromDropdown(false);
+                                    setAddrCoords(null);
+                                }}
+                                onFocus={() => { if (suggestions.length > 0) combobox.openDropdown(); }}
+                                onBlur={() => combobox.closeDropdown()}
+                            />
+                        </Combobox.Target>
+                        <Combobox.Dropdown>
+                            <Combobox.Options>
+                                {suggestions.map(f => (
+                                    <Combobox.Option
+                                        key={f.properties.id}
+                                        value={f.properties.label}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            const [lon, lat] = f.geometry.coordinates;
+                                            addrForm.setFieldValue('content', f.properties.label);
+                                            setAddrCoords({ lat, lon });
+                                            setHasSelectedFromDropdown(true);
+                                            setSuggestions([]);
+                                            combobox.closeDropdown();
+                                        }}
+                                    >
+                                        {f.properties.label}
+                                    </Combobox.Option>
+                                ))}
+                            </Combobox.Options>
+                        </Combobox.Dropdown>
+                    </Combobox>
+                    <TextInput
+                        label="Complément"
+                        placeholder="Code: 1234, Étage..."
+                        {...addrForm.getInputProps('details')}
+                    />
+                    <Group justify="flex-end" mt="xs">
+                        <Button variant="subtle" color="gray" onClick={handleCloseAddAddr}>Annuler</Button>
+                        <Button type="submit" loading={addAddrLoading} leftSection={<IconCheck size={14} />}>
+                            Enregistrer
+                        </Button>
+                    </Group>
+                </Stack>
+            </form>
+        </Modal>
+        <Container size="lg" pt="md" pb={{ base: 80, sm: 'xl' }}>
+            <Group mb="lg" justify="space-between" align="center">
+                <Title order={3}>Mon Panier</Title>
+                <Button component={Link} href="/menu" variant="subtle" leftSection={<IconArrowLeft size={16} />}>
                     Continuer mes achats
                 </Button>
             </Group>
 
-            <Stack gap="xl">
-                {/* Cart items */}
-                <Card withBorder radius="md">
-                    <Title order={4} mb="md">1. Récapitulatif du panier</Title>
-                    <Stack gap="sm">
-                        {cart.items.map((cartItem, idx) => (
-                            <div key={cartItem.cartId} style={{ borderBottom: idx < cart.items.length - 1 ? '1px solid #eee' : 'none', paddingBottom: 12 }}>
-                                <Group justify="space-between" align="flex-start">
-                                    <div style={{ flex: 1 }}>
-                                        <Group gap="xs" mb={4}>
-                                            <Text fw={500}>{cartItem.menuItemName}</Text>
-                                        </Group>
-                                        {cartItem.selectedOptions.length > 0 && (
-                                            <Stack gap={2}>
-                                                {cartItem.selectedOptions.map(opt => (
-                                                    <Text key={opt.groupId} size="xs" c="dimmed">
-                                                        {opt.groupName} : {opt.selectionLabels.join(', ')}
-                                                    </Text>
-                                                ))}
-                                            </Stack>
-                                        )}
+            {/* Stepper custom */}
+            {(() => {
+                const steps = isMobile
+                    ? (tupperwareEnabled ? ['Récap', 'Adresse', 'Contenant', 'Paiement'] : ['Récap', 'Adresse', 'Paiement'])
+                    : ['Récapitulatif', 'Livraison', 'Paiement'];
+                const visualStep = isMobile
+                    ? (activeStep === 0 ? 0 : activeStep === 1 ? (tupperwareEnabled ? 1 + mobileSubStep : 1) : (tupperwareEnabled ? 3 : 2))
+                    : activeStep;
+                return (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 32 }}>
+                        {steps.map((label, i) => {
+                            const done = i < visualStep;
+                            const active = i === visualStep;
+                            return (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                        <div style={{
+                                            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                                            backgroundColor: done || active ? '#4c6ef5' : 'var(--mantine-color-gray-2)',
+                                            color: done || active ? 'white' : 'var(--mantine-color-gray-6)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontWeight: 700, fontSize: 13,
+                                        }}>
+                                            {done ? '✓' : i + 1}
+                                        </div>
+                                        <Text size="xs" fw={active ? 600 : 400} c={active ? 'indigo' : 'dimmed'} style={{ whiteSpace: 'nowrap' }}>
+                                            {label}
+                                        </Text>
                                     </div>
-                                    <Group gap="sm" align="center">
-                                        <Text fw={600}>{cartItem.totalPrice.toFixed(2)} €</Text>
-                                        <ActionIcon
-                                            color="red"
-                                            variant="light"
-                                            size="sm"
-                                            onClick={() => removeItem(cartItem.cartId)}
-                                            aria-label="Supprimer"
-                                        >
-                                            <IconTrash size={14} />
-                                        </ActionIcon>
+                                    {i < steps.length - 1 && (
+                                        <div style={{
+                                            flex: 1, height: 2, marginBottom: 18, marginLeft: 6, marginRight: 6,
+                                            backgroundColor: done ? '#4c6ef5' : 'var(--mantine-color-gray-2)',
+                                        }} />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
+
+            {/* ── STEP 0 : Récap + notes ── */}
+            {activeStep === 0 && (
+                <Stack gap="lg">
+                    <Card withBorder radius="md">
+                        <Title order={4} mb="md">Récapitulatif</Title>
+                        <Stack gap="sm">
+                            {cart.items.map((cartItem, idx) => (
+                                <div key={cartItem.cartId} style={{ borderBottom: idx < cart.items.length - 1 ? '1px solid #eee' : 'none', paddingBottom: 12 }}>
+                                    <Group justify="space-between" align="flex-start">
+                                        <div style={{ flex: 1 }}>
+                                            <Text fw={500}>{cartItem.menuItemName}</Text>
+                                            {cartItem.selectedOptions.length > 0 && (
+                                                <Stack gap={2} mt={2}>
+                                                    {cartItem.selectedOptions.map(opt => (
+                                                        <Text key={opt.groupId} size="xs" c="dimmed">
+                                                            {opt.groupName} : {opt.selectionLabels.join(', ')}
+                                                        </Text>
+                                                    ))}
+                                                </Stack>
+                                            )}
+                                        </div>
+                                        <Group gap="sm" align="center">
+                                            <Text fw={600}>{cartItem.totalPrice.toFixed(2)} €</Text>
+                                            <ActionIcon color="red" variant="light" size="sm" onClick={() => removeItem(cartItem.cartId)}>
+                                                <IconTrash size={14} />
+                                            </ActionIcon>
+                                        </Group>
                                     </Group>
-                                </Group>
-                            </div>
-                        ))}
-                    </Stack>
+                                </div>
+                            ))}
+                        </Stack>
+                        <Divider my="md" />
+                        <Group justify="space-between" mb="xs">
+                            <Text size="sm" c="dimmed">Date de livraison</Text>
+                            <Text size="sm" fw={500} style={{ textTransform: 'capitalize' }}>{menuDateFormatted}</Text>
+                        </Group>
+                        <Group justify="space-between">
+                            <Text fw={700} size="lg">Total</Text>
+                            <Text fw={700} size="lg" c="indigo">{totalPrice.toFixed(2)} €</Text>
+                        </Group>
+                        <Text size="xs" c="dimmed" mt={4}>Règlement sur place en wero, lydia ou cash</Text>
+                    </Card>
 
-                    <Divider my="md" />
-                    <Group justify="space-between">
-                        <Text fw={700} size="lg">Total</Text>
-                        <Text fw={700} size="lg" c="indigo">{totalPrice.toFixed(2)} €</Text>
-                    </Group>
-                    <Text size="xs" c="dimmed" mt={4}>Règlement sur place en wero, lydia ou cash</Text>
-                </Card>
+                    <Card withBorder radius="md">
+                        <Title order={4} mb="md">Informations complémentaires</Title>
+                        <Textarea
+                            label="Notes (optionnel)"
+                            placeholder="Allergies, préférences particulières..."
+                            autosize
+                            minRows={2}
+                            value={notes}
+                            onChange={(e) => setNotes(e.currentTarget.value)}
+                        />
+                    </Card>
 
-                {/* Packaging */}
-                <Card withBorder radius="md">
-                    <Title order={4} mb="md">2. Emballage</Title>
-                    <Stack>
-                        <Radio.Group
-                            value={packaging}
-                            onChange={(val) => setPackaging(val as any)}
-                            label="Choisissez votre contenant"
+                    <Group justify="flex-end">
+                        <Button
+                            rightSection={<IconArrowRight size={16} />}
+                            disabled={!canAdvanceStep0}
+                            onClick={() => setActiveStep(1)}
                         >
-                            <Stack mt="xs">
-                                <Radio value="CARDBOARD" label="Carton (Jetable/Recyclable)" />
-                                <Radio
-                                    value="TUPPERWARE"
-                                    label="Tupperware (Consigne à rendre - Stock limité)"
-                                    disabled={!tupperwareEnabled}
-                                    styles={!tupperwareEnabled ? {
-                                        label: { color: '#adb5bd', cursor: 'not-allowed' },
-                                        radio: { cursor: 'not-allowed' },
-                                    } : {}}
-                                />
-                            </Stack>
-                        </Radio.Group>
+                            Suivant
+                        </Button>
+                    </Group>
+                </Stack>
+            )}
 
-                        {!tupperwareEnabled && (
-                            <Alert icon={<IconAlertCircle size={16} />} color="gray" title="Tupperware non disponible" variant="light">
-                                <Text size="sm" c="dimmed">Le service Tupperware n'est pas disponible pour ce service.</Text>
+            {/* ── STEP 1 : Adresse + contenant ── */}
+            {activeStep === 1 && (
+                <Stack gap="lg">
+                    {(!isMobile || mobileSubStep === 0) && (
+                        <Card withBorder radius="md">
+                        <Title order={4} mb="md">Adresse de livraison</Title>
+
+                        {deliveryZone && !hasAnyValidAddress && (
+                            <Alert icon={<IconMapPinOff size={16} />} color="red" mb="md" title={`Zone "${deliveryZone.name}" — Livraison impossible`}>
+                                Aucune adresse dans la zone de livraison.
                             </Alert>
                         )}
 
-                        {tupperwareEnabled && packaging === 'TUPPERWARE' && (
-                            <Alert icon={<IconAlertCircle size={16} />} color="blue" title="Fonctionnement Consigne">
-                                En choisissant Tupperware, vous vous engagez à le restituer à la commande suivante.
+                        {addresses.length === 0 ? (
+                            <Alert icon={<IconAlertCircle size={16} />} color="yellow" mb="md">
+                                Aucune adresse enregistrée. Ajoutez-en une ci-dessous.
                             </Alert>
-                        )}
-
-                        <Text fw={500} size="sm" mb={4}>Retour de contenants</Text>
-                        {containerBalance > 0 ? (
-                            <Stack gap="xs">
-                                <Text size="sm">Vous avez actuellement <b>{containerBalance}</b> Tupperware(s) en votre possession.</Text>
-                                <NumberInput
-                                    label="Combien allez-vous en rendre à la livraison ?"
-                                    description="Le coursier les récupérera lors de la livraison."
-                                    min={0}
-                                    max={containerBalance}
-                                    value={returnCount}
-                                    onChange={(val) => setReturnCount(Number(val))}
-                                />
-                            </Stack>
                         ) : (
-                            <Text size="sm" c="dimmed">Vous n'avez aucun contenant à rendre.</Text>
-                        )}
-                    </Stack>
-                </Card>
-
-                {/* Address + time */}
-                <Card withBorder radius="md">
-                    <Title order={4} mb="md">3. Adresse et heure de livraison</Title>
-
-                    <Alert icon={<IconAlertCircle size={16} />} color="blue" mb="md">
-                        <Text size="sm">
-                            La livraison est prévue <strong>entre 11h et 13h</strong>. Vous serez informé d'une heure plus précise ultérieurement.
-                        </Text>
-                        <Text size="sm" mt={4}>
-                            Si vous avez un empêchement sur une partie de cette plage, merci de le préciser ci-dessous.
-                        </Text>
-                    </Alert>
-
-                    <Textarea
-                        label="Contrainte horaire (optionnel)"
-                        placeholder="Ex : Indisponible avant 11h30, ou absent après 12h15..."
-                        autosize
-                        minRows={2}
-                        mb="md"
-                        value={timeConstraint}
-                        onChange={(e) => setTimeConstraint(e.currentTarget.value)}
-                    />
-
-                    <Divider label="Adresse de livraison" labelPosition="left" mb="md" />
-
-                    {addresses.length === 0 ? (
-                        <Alert icon={<IconAlertCircle size={16} />} title="Aucune adresse" color="yellow">
-                            Vous n'avez pas d'adresse enregistrée.{' '}
-                            <Anchor component={Link} href="/preferences">Ajouter une adresse</Anchor>
-                        </Alert>
-                    ) : (
-                        <>
-                            {deliveryZone && !hasAnyValidAddress && (
-                                <Alert icon={<IconMapPinOff size={16} />} color="red" mb="md"
-                                    title={`Zone "${deliveryZone.name}" — Livraison impossible`}
-                                >
-                                    Aucune de vos adresses ne se trouve dans la zone de livraison de ce menu.
-                                    Mettez à jour vos adresses dans vos{' '}
-                                    <Anchor component={Link} href="/preferences">préférences</Anchor>.
-                                </Alert>
-                            )}
-                            {/*{deliveryZone && hasAnyValidAddress && validAddresses.length < addresses.length && (
-                                <Alert icon={<IconMapPinOff size={16} />} color="yellow" variant="light" mb="md">
-                                    Certaines de vos adresses ne sont pas dans la zone de livraison et ont été désactivées.
-                                    <Text size="sm" mt={4}>
-                                        Adresse{validAddresses.length > 1 ? 's' : ''} disponible{validAddresses.length > 1 ? 's' : ''} : {validAddresses.map(a => a.content).join(', ')}
-                                    </Text>
-                                </Alert>
-                            )}*/}
-                            <Radio.Group value={addressId} onChange={setAddressId}>
+                            <Radio.Group value={addressId} onChange={setAddressId} mb="md">
                                 <Stack>
                                     {addresses.map(addr => {
                                         const inZone = isAddressInZone(addr, deliveryZone);
@@ -315,18 +428,12 @@ export default function CartClient({ addresses, containerBalance, tupperwareEnab
                                                 key={addr.id}
                                                 value={addr.id}
                                                 disabled={!inZone}
-                                                // @ts-ignore
                                                 label={
                                                     <Group gap="xs">
                                                         <Text size="sm" c={inZone ? undefined : 'dimmed'}>
-                                                            {/* @ts-ignore */}
-                                                            {addr.label} — {addr.content}{addr.details ? ` (${addr.details})` : ''}
+                                                            {addr.label} — {addr.content}{(addr as any).details ? ` (${(addr as any).details})` : ''}
                                                         </Text>
-                                                        {!inZone && (
-                                                            <Badge size="xs" color="orange" variant="light">
-                                                                Hors zone
-                                                            </Badge>
-                                                        )}
+                                                        {!inZone && <Badge size="xs" color="orange" variant="light">Hors zone</Badge>}
                                                     </Group>
                                                 }
                                             />
@@ -334,37 +441,159 @@ export default function CartClient({ addresses, containerBalance, tupperwareEnab
                                     })}
                                 </Stack>
                             </Radio.Group>
-                        </>
+                        )}
+
+                        <Button
+                            variant="subtle"
+                            size="xs"
+                            leftSection={<IconPlus size={14} />}
+                            onClick={openAddAddr}
+                        >
+                            Ajouter une adresse
+                        </Button>
+                    </Card>
                     )}
-                </Card>
 
-                {/* Notes */}
-                <Card withBorder radius="md">
-                    <Title order={4} mb="md">4. Informations complémentaires</Title>
-                    <Textarea
-                        label="Notes (optionnel)"
-                        placeholder="Allergies, préférences, codes d'entrée..."
-                        autosize
-                        minRows={2}
-                        value={notes}
-                        onChange={(e) => setNotes(e.currentTarget.value)}
-                    />
-                </Card>
+                    {(!isMobile || mobileSubStep === 0) && (
+                        <Card withBorder radius="md">
+                            <Title order={4} mb="md">Contrainte horaire</Title>
+                            <Textarea
+                                label="Indisponibilité sur le créneau 11h–13h (optionnel)"
+                                placeholder="Ex : Indisponible avant 11h30, absent après 12h15..."
+                                autosize
+                                minRows={2}
+                                value={timeConstraint}
+                                onChange={(e) => setTimeConstraint(e.currentTarget.value)}
+                            />
+                        </Card>
+                    )}
 
-                <Button
-                    size="lg"
-                    leftSection={<IconCheck size={20} />}
-                    loading={loading}
-                    disabled={addresses.length === 0 || cart.items.length === 0 || !hasAnyValidAddress}
-                    onClick={handleSubmit}
-                    variant="gradient"
-                    gradient={{ from: 'indigo', to: 'cyan' }}
-                >
-                    {!hasAnyValidAddress && deliveryZone
-                        ? `Livraison indisponible dans votre zone`
-                        : `Valider la commande — ${totalPrice.toFixed(2)} €`}
-                </Button>
-            </Stack>
+                    {tupperwareEnabled && (!isMobile || mobileSubStep === 1) && (
+                        <Card withBorder radius="md">
+                            <Title order={4} mb="md">Contenant</Title>
+                            <Radio.Group value={packaging} onChange={(v) => setPackaging(v as any)} label="Choisissez votre emballage" mb="md">
+                                <Stack mt="xs">
+                                    <Radio value="CARDBOARD" label="Carton (jetable / recyclable)" />
+                                    <Radio
+                                        value="TUPPERWARE"
+                                        label="Tupperware (consigné)"
+                                        disabled={!tupperwareEnabled}
+                                    />
+                                </Stack>
+                            </Radio.Group>
+
+                            {!tupperwareEnabled && (
+                                <Alert icon={<IconAlertCircle size={16} />} color="gray" variant="light" mb="sm">
+                                    <Text size="sm">Tupperware non disponible pour ce service.</Text>
+                                </Alert>
+                            )}
+
+                            {tupperwareEnabled && packaging === 'TUPPERWARE' && (
+                                <Alert icon={<IconAlertCircle size={16} />} color="orange" mb="sm" title="Caution">
+                                    Une caution de <strong>10€</strong> sera ajoutée lors du paiement. Elle vous sera remboursée à la restitution.
+                                </Alert>
+                            )}
+
+                            {containerBalance > 0 && (
+                                <Stack gap="xs" mt="sm">
+                                    <Text size="sm" fw={500}>Retour de tupperwares</Text>
+                                    <Text size="sm">Vous avez <b>{containerBalance}</b> tupperware(s) en votre possession.</Text>
+                                    <NumberInput
+                                        label="Combien allez-vous en rendre ?"
+                                        min={0}
+                                        max={containerBalance}
+                                        value={returnCount}
+                                        onChange={(v) => setReturnCount(Number(v))}
+                                    />
+                                </Stack>
+                            )}
+                        </Card>
+                    )}
+
+                    <Group justify="space-between">
+                        <Button
+                            variant="subtle"
+                            leftSection={<IconArrowLeft size={16} />}
+                            onClick={() => {
+                                if (isMobile && tupperwareEnabled && mobileSubStep === 1) setMobileSubStep(0);
+                                else { setMobileSubStep(0); setActiveStep(0); }
+                            }}
+                        >
+                            Retour
+                        </Button>
+                        <Button
+                            rightSection={<IconArrowRight size={16} />}
+                            disabled={mobileSubStep === 0 ? !canAdvanceStep1 : false}
+                            onClick={() => {
+                                if (isMobile && tupperwareEnabled && mobileSubStep === 0) setMobileSubStep(1);
+                                else setActiveStep(2);
+                            }}
+                        >
+                            Suivant
+                        </Button>
+                    </Group>
+                </Stack>
+            )}
+
+            {/* ── STEP 2 : Paiement ── */}
+            {activeStep === 2 && (
+                <Stack gap="lg">
+                    <Card withBorder radius="md">
+                        <Group mb="lg" gap="sm">
+                            <ThemeIcon size="xl" variant="light" color="indigo" radius="md">
+                                <IconCreditCard size={22} />
+                            </ThemeIcon>
+                            <div>
+                                <Title order={4}>Paiement</Title>
+                                <Text size="sm" c="dimmed">Règlement à la livraison</Text>
+                            </div>
+                        </Group>
+
+                        <Alert icon={<IconAlertCircle size={16} />} color="blue" mb="md">
+                            Le paiement s'effectue directement auprès du livreur : <strong>wero, lydia ou cash</strong>.
+                        </Alert>
+
+                        <Divider my="md" />
+
+                        <Stack gap="xs">
+                            <Group justify="space-between">
+                                <Text size="sm" c="dimmed">Sous-total</Text>
+                                <Text size="sm">{totalPrice.toFixed(2)} €</Text>
+                            </Group>
+                            {packaging === 'TUPPERWARE' && (
+                                <Group justify="space-between">
+                                    <Text size="sm" c="dimmed">Caution tupperware</Text>
+                                    <Text size="sm">10,00 €</Text>
+                                </Group>
+                            )}
+                            <Divider />
+                            <Group justify="space-between">
+                                <Text fw={700}>Total à régler</Text>
+                                <Text fw={700} c="indigo" size="lg">
+                                    {(totalPrice + (packaging === 'TUPPERWARE' ? 10 : 0)).toFixed(2)} €
+                                </Text>
+                            </Group>
+                        </Stack>
+                    </Card>
+
+                    <Group justify="space-between">
+                        <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => setActiveStep(1)}>
+                            Retour
+                        </Button>
+                        <Button
+                            size="lg"
+                            leftSection={<IconCheck size={20} />}
+                            loading={loading}
+                            onClick={handleSubmit}
+                            variant="gradient"
+                            gradient={{ from: 'indigo', to: 'cyan' }}
+                        >
+                            Valider la commande
+                        </Button>
+                    </Group>
+                </Stack>
+            )}
         </Container>
+        </>
     );
 }

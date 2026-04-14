@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { DietaryOption, AddressType } from "@prisma/client";
+import { DietaryOption, AddressType, Packaging } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const BCRYPT_ROUNDS = 12;
@@ -32,14 +32,14 @@ export async function changePassword(currentPassword: string, newPassword: strin
     return { success: true };
 }
 
-export async function updateDietaryPreferences(preferences: DietaryOption[]) {
+export async function updateProfileAction(name: string, phoneNumber: string) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return { success: false, error: "Non authentifié" };
 
     try {
         await prisma.user.update({
             where: { id: session.user.id },
-            data: { dietaryPreferences: preferences },
+            data: { name: name || null, phoneNumber: phoneNumber || null },
         });
         revalidatePath('/preferences');
         return { success: true };
@@ -66,6 +66,57 @@ export async function updatePhoneNumber(phoneNumber: string) {
     }
 }
 
+export async function updateDietaryPreferences(preferences: DietaryOption[]) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return { success: false, error: "Non authentifié" };
+
+    try {
+        await prisma.user.update({
+            where: { id: session.user.id },
+            data: { dietaryPreferences: preferences },
+        });
+        revalidatePath('/preferences');
+        return { success: true };
+    } catch (error) {
+        console.error(error);
+        return { success: false, error: "Erreur lors de la mise à jour" };
+    }
+}
+
+export async function updatePackagingPreference(defaultPackaging: Packaging) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return { success: false, error: "Non authentifié" };
+
+    try {
+        await prisma.user.update({
+            where: { id: session.user.id },
+            data: { defaultPackaging },
+        });
+        revalidatePath('/preferences');
+        return { success: true };
+    } catch (error) {
+        console.error(error);
+        return { success: false, error: "Erreur lors de la mise à jour" };
+    }
+}
+
+export async function updateEmailPreferences(emailMenuWeekly: boolean, emailPromo: boolean) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return { success: false, error: "Non authentifié" };
+
+    try {
+        await prisma.user.update({
+            where: { id: session.user.id },
+            data: { emailMenuWeekly, emailPromo },
+        });
+        revalidatePath('/preferences');
+        return { success: true };
+    } catch (error) {
+        console.error(error);
+        return { success: false, error: "Erreur lors de la mise à jour" };
+    }
+}
+
 export async function addAddressAction(label: string, content: string, details?: string, lat?: number, lon?: number, type?: AddressType) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return { success: false, error: "Non authentifié" };
@@ -73,7 +124,7 @@ export async function addAddressAction(label: string, content: string, details?:
     if (!label || !content) return { success: false, error: "Champs requis" };
 
     try {
-        await prisma.address.create({
+        const address = await prisma.address.create({
             data: {
                 userId: session.user.id,
                 label,
@@ -85,7 +136,7 @@ export async function addAddressAction(label: string, content: string, details?:
             },
         });
         revalidatePath('/preferences');
-        return { success: true };
+        return { success: true, address };
     } catch (error) {
         console.error(error);
         return { success: false, error: "Erreur lors de la création" };
@@ -130,7 +181,6 @@ export async function updateAddressAction(id: string, label: string, content: st
                 type: type ?? 'DOMICILE',
                 content,
                 details,
-                // Mettre à jour les coordonnées seulement si fournies (sélection depuis l'autocomplete)
                 ...(lat !== undefined && lon !== undefined ? { lat, lon } : {}),
             },
         });
