@@ -2,8 +2,8 @@
 
 import {
     Container, Title, Text, Button, Group, Stack, Card, Radio, Divider, Badge,
-    Alert, Textarea, NumberInput, ActionIcon, Anchor, ThemeIcon, Stepper,
-    TextInput, Combobox, useCombobox, Loader, SegmentedControl, Collapse,
+    Alert, Textarea, NumberInput, ActionIcon, Anchor, ThemeIcon, Modal,
+    TextInput, Combobox, useCombobox, Loader, SegmentedControl,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { createOrderAction, getMenuDeliveryZoneAction } from '../order/actions';
@@ -11,7 +11,7 @@ import { addAddressAction } from '../preferences/actions';
 import { Address, AddressType } from '@prisma/client';
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from '@mantine/form';
-import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure, useMediaQuery } from '@mantine/hooks';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import Link from 'next/link';
@@ -61,7 +61,9 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
     const router = useRouter();
     const { cart, removeItem, clearCurrentCart, totalPrice } = useCart();
 
+    const isMobile = useMediaQuery('(max-width: 768px)');
     const [activeStep, setActiveStep] = useState(0);
+    const [mobileSubStep, setMobileSubStep] = useState(0);
     const [loading, setLoading] = useState(false);
 
     // Step 0 — Récap + notes
@@ -76,7 +78,7 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
     const [deliveryZone, setDeliveryZone] = useState<DeliveryZone>(null);
 
     // Inline add address
-    const [addAddrOpened, { toggle: toggleAddAddr, close: closeAddAddr }] = useDisclosure(false);
+    const [addAddrOpened, { open: openAddAddr, close: closeAddAddr }] = useDisclosure(false);
     const [addAddrLoading, setAddAddrLoading] = useState(false);
     const combobox = useCombobox({ onDropdownClose: () => combobox.resetSelectedOption() });
     const [suggestions, setSuggestions] = useState<BanFeature[]>([]);
@@ -203,23 +205,134 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
     const canAdvanceStep0 = cart.items.length > 0;
     const canAdvanceStep1 = !!addressId && hasAnyValidAddress;
 
+    const handleCloseAddAddr = () => {
+        addrForm.reset();
+        setAddrCoords(null);
+        setSuggestions([]);
+        setHasSelectedFromDropdown(false);
+        closeAddAddr();
+    };
+
     return (
+        <>
+        <Modal opened={addAddrOpened} onClose={handleCloseAddAddr} title="Ajouter une adresse" centered size="md">
+            <form onSubmit={addrForm.onSubmit(handleAddAddress)}>
+                <Stack gap="sm">
+                    <SegmentedControl
+                        data={[
+                            { label: '🏠 Domicile', value: 'DOMICILE' },
+                            { label: '🏢 Bureau', value: 'BUREAU' },
+                        ]}
+                        {...addrForm.getInputProps('type')}
+                    />
+                    <TextInput
+                        label="Nom"
+                        placeholder="Chez moi, Bureau..."
+                        withAsterisk
+                        {...addrForm.getInputProps('label')}
+                    />
+                    <Combobox store={combobox} onOptionSubmit={() => {}}>
+                        <Combobox.Target>
+                            <TextInput
+                                label="Adresse"
+                                placeholder="32 rue de Rivoli, Paris..."
+                                withAsterisk
+                                rightSection={loadingSuggestions ? <Loader size="xs" /> : null}
+                                {...addrForm.getInputProps('content')}
+                                onChange={(e) => {
+                                    addrForm.setFieldValue('content', e.currentTarget.value);
+                                    setHasSelectedFromDropdown(false);
+                                    setAddrCoords(null);
+                                }}
+                                onFocus={() => { if (suggestions.length > 0) combobox.openDropdown(); }}
+                                onBlur={() => combobox.closeDropdown()}
+                            />
+                        </Combobox.Target>
+                        <Combobox.Dropdown>
+                            <Combobox.Options>
+                                {suggestions.map(f => (
+                                    <Combobox.Option
+                                        key={f.properties.id}
+                                        value={f.properties.label}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            const [lon, lat] = f.geometry.coordinates;
+                                            addrForm.setFieldValue('content', f.properties.label);
+                                            setAddrCoords({ lat, lon });
+                                            setHasSelectedFromDropdown(true);
+                                            setSuggestions([]);
+                                            combobox.closeDropdown();
+                                        }}
+                                    >
+                                        {f.properties.label}
+                                    </Combobox.Option>
+                                ))}
+                            </Combobox.Options>
+                        </Combobox.Dropdown>
+                    </Combobox>
+                    <TextInput
+                        label="Complément"
+                        placeholder="Code: 1234, Étage..."
+                        {...addrForm.getInputProps('details')}
+                    />
+                    <Group justify="flex-end" mt="xs">
+                        <Button variant="subtle" color="gray" onClick={handleCloseAddAddr}>Annuler</Button>
+                        <Button type="submit" loading={addAddrLoading} leftSection={<IconCheck size={14} />}>
+                            Enregistrer
+                        </Button>
+                    </Group>
+                </Stack>
+            </form>
+        </Modal>
         <Container size="sm" py="xl">
-            <Group mb="xl" justify="space-between" align="center">
-                <div>
-                    <Title order={2}>Mon Panier</Title>
-                    <Text size="sm" c="dimmed" style={{ textTransform: 'capitalize' }}>{menuDateFormatted}</Text>
-                </div>
+            <Group mb="lg" justify="space-between" align="center">
+                <Title order={2}>Mon Panier</Title>
                 <Button component={Link} href="/menu" variant="subtle" leftSection={<IconArrowLeft size={16} />}>
                     Continuer mes achats
                 </Button>
             </Group>
 
-            <Stepper active={activeStep} mb="xl" size="sm">
-                <Stepper.Step label="Récapitulatif" />
-                <Stepper.Step label="Livraison" />
-                <Stepper.Step label="Paiement" />
-            </Stepper>
+            {/* Stepper custom */}
+            {(() => {
+                const steps = isMobile
+                    ? (tupperwareEnabled ? ['Récap', 'Adresse', 'Contenant', 'Paiement'] : ['Récap', 'Adresse', 'Paiement'])
+                    : ['Récapitulatif', 'Livraison', 'Paiement'];
+                const visualStep = isMobile
+                    ? (activeStep === 0 ? 0 : activeStep === 1 ? (tupperwareEnabled ? 1 + mobileSubStep : 1) : (tupperwareEnabled ? 3 : 2))
+                    : activeStep;
+                return (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 32 }}>
+                        {steps.map((label, i) => {
+                            const done = i < visualStep;
+                            const active = i === visualStep;
+                            return (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                                        <div style={{
+                                            width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                                            backgroundColor: done || active ? '#4c6ef5' : 'var(--mantine-color-gray-2)',
+                                            color: done || active ? 'white' : 'var(--mantine-color-gray-6)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontWeight: 700, fontSize: 13,
+                                        }}>
+                                            {done ? '✓' : i + 1}
+                                        </div>
+                                        <Text size="xs" fw={active ? 600 : 400} c={active ? 'indigo' : 'dimmed'} style={{ whiteSpace: 'nowrap' }}>
+                                            {label}
+                                        </Text>
+                                    </div>
+                                    {i < steps.length - 1 && (
+                                        <div style={{
+                                            flex: 1, height: 2, marginBottom: 18, marginLeft: 6, marginRight: 6,
+                                            backgroundColor: done ? '#4c6ef5' : 'var(--mantine-color-gray-2)',
+                                        }} />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            })()}
 
             {/* ── STEP 0 : Récap + notes ── */}
             {activeStep === 0 && (
@@ -253,6 +366,10 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
                             ))}
                         </Stack>
                         <Divider my="md" />
+                        <Group justify="space-between" mb="xs">
+                            <Text size="sm" c="dimmed">Date de livraison</Text>
+                            <Text size="sm" fw={500} style={{ textTransform: 'capitalize' }}>{menuDateFormatted}</Text>
+                        </Group>
                         <Group justify="space-between">
                             <Text fw={700} size="lg">Total</Text>
                             <Text fw={700} size="lg" c="indigo">{totalPrice.toFixed(2)} €</Text>
@@ -287,7 +404,8 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
             {/* ── STEP 1 : Adresse + contenant ── */}
             {activeStep === 1 && (
                 <Stack gap="lg">
-                    <Card withBorder radius="md">
+                    {(!isMobile || mobileSubStep === 0) && (
+                        <Card withBorder radius="md">
                         <Title order={4} mb="md">Adresse de livraison</Title>
 
                         {deliveryZone && !hasAnyValidAddress && (
@@ -329,141 +447,87 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
                             variant="subtle"
                             size="xs"
                             leftSection={<IconPlus size={14} />}
-                            onClick={toggleAddAddr}
+                            onClick={openAddAddr}
                         >
-                            {addAddrOpened ? 'Annuler' : 'Ajouter une adresse'}
+                            Ajouter une adresse
                         </Button>
+                    </Card>
+                    )}
 
-                        <Collapse in={addAddrOpened} mt="md">
-                            <form onSubmit={addrForm.onSubmit(handleAddAddress)}>
-                                <Stack gap="sm">
-                                    <SegmentedControl
-                                        data={[
-                                            { label: '🏠 Domicile', value: 'DOMICILE' },
-                                            { label: '🏢 Bureau', value: 'BUREAU' },
-                                        ]}
-                                        {...addrForm.getInputProps('type')}
+                    {(!isMobile || mobileSubStep === 0) && (
+                        <Card withBorder radius="md">
+                            <Title order={4} mb="md">Contrainte horaire</Title>
+                            <Textarea
+                                label="Indisponibilité sur le créneau 11h–13h (optionnel)"
+                                placeholder="Ex : Indisponible avant 11h30, absent après 12h15..."
+                                autosize
+                                minRows={2}
+                                value={timeConstraint}
+                                onChange={(e) => setTimeConstraint(e.currentTarget.value)}
+                            />
+                        </Card>
+                    )}
+
+                    {tupperwareEnabled && (!isMobile || mobileSubStep === 1) && (
+                        <Card withBorder radius="md">
+                            <Title order={4} mb="md">Contenant</Title>
+                            <Radio.Group value={packaging} onChange={(v) => setPackaging(v as any)} label="Choisissez votre emballage" mb="md">
+                                <Stack mt="xs">
+                                    <Radio value="CARDBOARD" label="Carton (jetable / recyclable)" />
+                                    <Radio
+                                        value="TUPPERWARE"
+                                        label="Tupperware (consigné)"
+                                        disabled={!tupperwareEnabled}
                                     />
-                                    <TextInput
-                                        label="Nom"
-                                        placeholder="Chez moi, Bureau..."
-                                        withAsterisk
-                                        {...addrForm.getInputProps('label')}
-                                    />
-                                    <Combobox store={combobox} onOptionSubmit={() => {}}>
-                                        <Combobox.Target>
-                                            <TextInput
-                                                label="Adresse"
-                                                placeholder="32 rue de Rivoli, Paris..."
-                                                withAsterisk
-                                                rightSection={loadingSuggestions ? <Loader size="xs" /> : null}
-                                                {...addrForm.getInputProps('content')}
-                                                onChange={(e) => {
-                                                    addrForm.setFieldValue('content', e.currentTarget.value);
-                                                    setHasSelectedFromDropdown(false);
-                                                    setAddrCoords(null);
-                                                }}
-                                                onFocus={() => { if (suggestions.length > 0) combobox.openDropdown(); }}
-                                                onBlur={() => combobox.closeDropdown()}
-                                            />
-                                        </Combobox.Target>
-                                        <Combobox.Dropdown>
-                                            <Combobox.Options>
-                                                {suggestions.map(f => (
-                                                    <Combobox.Option
-                                                        key={f.properties.id}
-                                                        value={f.properties.label}
-                                                        onMouseDown={(e) => {
-                                                            e.preventDefault();
-                                                            const [lon, lat] = f.geometry.coordinates;
-                                                            addrForm.setFieldValue('content', f.properties.label);
-                                                            setAddrCoords({ lat, lon });
-                                                            setHasSelectedFromDropdown(true);
-                                                            setSuggestions([]);
-                                                            combobox.closeDropdown();
-                                                        }}
-                                                    >
-                                                        {f.properties.label}
-                                                    </Combobox.Option>
-                                                ))}
-                                            </Combobox.Options>
-                                        </Combobox.Dropdown>
-                                    </Combobox>
-                                    <TextInput
-                                        label="Complément"
-                                        placeholder="Code: 1234, Étage..."
-                                        {...addrForm.getInputProps('details')}
-                                    />
-                                    <Group justify="flex-end">
-                                        <Button type="submit" size="xs" loading={addAddrLoading} leftSection={<IconCheck size={14} />}>
-                                            Enregistrer
-                                        </Button>
-                                    </Group>
                                 </Stack>
-                            </form>
-                        </Collapse>
-                    </Card>
+                            </Radio.Group>
 
-                    <Card withBorder radius="md">
-                        <Title order={4} mb="md">Contrainte horaire</Title>
-                        <Textarea
-                            label="Indisponibilité sur le créneau 11h–13h (optionnel)"
-                            placeholder="Ex : Indisponible avant 11h30, absent après 12h15..."
-                            autosize
-                            minRows={2}
-                            value={timeConstraint}
-                            onChange={(e) => setTimeConstraint(e.currentTarget.value)}
-                        />
-                    </Card>
+                            {!tupperwareEnabled && (
+                                <Alert icon={<IconAlertCircle size={16} />} color="gray" variant="light" mb="sm">
+                                    <Text size="sm">Tupperware non disponible pour ce service.</Text>
+                                </Alert>
+                            )}
 
-                    <Card withBorder radius="md">
-                        <Title order={4} mb="md">Contenant</Title>
-                        <Radio.Group value={packaging} onChange={(v) => setPackaging(v as any)} label="Choisissez votre emballage" mb="md">
-                            <Stack mt="xs">
-                                <Radio value="CARDBOARD" label="Carton (jetable / recyclable)" />
-                                <Radio
-                                    value="TUPPERWARE"
-                                    label="Tupperware (consigné)"
-                                    disabled={!tupperwareEnabled}
-                                />
-                            </Stack>
-                        </Radio.Group>
+                            {tupperwareEnabled && packaging === 'TUPPERWARE' && (
+                                <Alert icon={<IconAlertCircle size={16} />} color="orange" mb="sm" title="Caution">
+                                    Une caution de <strong>10€</strong> sera ajoutée lors du paiement. Elle vous sera remboursée à la restitution.
+                                </Alert>
+                            )}
 
-                        {!tupperwareEnabled && (
-                            <Alert icon={<IconAlertCircle size={16} />} color="gray" variant="light" mb="sm">
-                                <Text size="sm">Tupperware non disponible pour ce service.</Text>
-                            </Alert>
-                        )}
-
-                        {tupperwareEnabled && packaging === 'TUPPERWARE' && (
-                            <Alert icon={<IconAlertCircle size={16} />} color="orange" mb="sm" title="Caution">
-                                Une caution de <strong>10€</strong> sera ajoutée lors du paiement. Elle vous sera remboursée à la restitution.
-                            </Alert>
-                        )}
-
-                        {containerBalance > 0 && (
-                            <Stack gap="xs" mt="sm">
-                                <Text size="sm" fw={500}>Retour de tupperwares</Text>
-                                <Text size="sm">Vous avez <b>{containerBalance}</b> tupperware(s) en votre possession.</Text>
-                                <NumberInput
-                                    label="Combien allez-vous en rendre ?"
-                                    min={0}
-                                    max={containerBalance}
-                                    value={returnCount}
-                                    onChange={(v) => setReturnCount(Number(v))}
-                                />
-                            </Stack>
-                        )}
-                    </Card>
+                            {containerBalance > 0 && (
+                                <Stack gap="xs" mt="sm">
+                                    <Text size="sm" fw={500}>Retour de tupperwares</Text>
+                                    <Text size="sm">Vous avez <b>{containerBalance}</b> tupperware(s) en votre possession.</Text>
+                                    <NumberInput
+                                        label="Combien allez-vous en rendre ?"
+                                        min={0}
+                                        max={containerBalance}
+                                        value={returnCount}
+                                        onChange={(v) => setReturnCount(Number(v))}
+                                    />
+                                </Stack>
+                            )}
+                        </Card>
+                    )}
 
                     <Group justify="space-between">
-                        <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={() => setActiveStep(0)}>
+                        <Button
+                            variant="subtle"
+                            leftSection={<IconArrowLeft size={16} />}
+                            onClick={() => {
+                                if (isMobile && tupperwareEnabled && mobileSubStep === 1) setMobileSubStep(0);
+                                else { setMobileSubStep(0); setActiveStep(0); }
+                            }}
+                        >
                             Retour
                         </Button>
                         <Button
                             rightSection={<IconArrowRight size={16} />}
-                            disabled={!canAdvanceStep1}
-                            onClick={() => setActiveStep(2)}
+                            disabled={mobileSubStep === 0 ? !canAdvanceStep1 : false}
+                            onClick={() => {
+                                if (isMobile && tupperwareEnabled && mobileSubStep === 0) setMobileSubStep(1);
+                                else setActiveStep(2);
+                            }}
                         >
                             Suivant
                         </Button>
@@ -530,5 +594,6 @@ export default function CartClient({ addresses: initialAddresses, containerBalan
                 </Stack>
             )}
         </Container>
+        </>
     );
 }

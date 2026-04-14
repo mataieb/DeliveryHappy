@@ -11,7 +11,6 @@ export function FloatingCart() {
     const pathname = usePathname();
     const router = useRouter();
 
-    // Hide if not logged in, no items, or already on cart page
     if (status !== 'authenticated' || totalItems === 0 || pathname === '/cart') return null;
 
     return (
@@ -46,10 +45,8 @@ export function FloatingCart() {
                 (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 24px rgba(76, 110, 245, 0.45)';
             }}
         >
-            {/* Cart icon */}
             <span style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <IconShoppingCart size={22} />
-                {/* Item count badge */}
                 <span style={{
                     position: 'absolute',
                     top: -10,
@@ -69,11 +66,7 @@ export function FloatingCart() {
                     {totalItems}
                 </span>
             </span>
-
-            {/* Label + price */}
-            <span>
-                Mon panier — <strong>{totalPrice.toFixed(2)} €</strong>
-            </span>
+            <span>Mon panier — <strong>{totalPrice.toFixed(2)} €</strong></span>
         </button>
     );
 }
