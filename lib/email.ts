@@ -75,7 +75,7 @@ function buildMenuEmailHtml(menuDate: string, items: { name: string; price: numb
                     <!-- CTA -->
                     <div style="text-align:center; margin:28px 0 8px;">
                         <a href="${APP_URL}/menu"
-                           style="display:inline-block; background: linear-gradient(135deg, #4c6ef5, #15aabf); color:white; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px; box-shadow: 0 4px 15px rgba(76,110,245,0.35);">
+                           style="display:inline-block; background-color:#4c6ef5; color:#ffffff; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px;">
                             Commander maintenant
                         </a>
                     </div>
@@ -206,7 +206,7 @@ export async function sendVerificationEmail(email: string, name: string, token: 
 
                     <div style="text-align:center; margin:28px 0;">
                         <a href="${verificationUrl}"
-                           style="display:inline-block; background: linear-gradient(135deg, #4c6ef5, #15aabf); color:white; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px; box-shadow: 0 4px 15px rgba(76,110,245,0.35);">
+                           style="display:inline-block; background-color:#4c6ef5; color:#ffffff; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px;">
                             Confirmer mon email
                         </a>
                     </div>
@@ -282,7 +282,7 @@ export async function sendPasswordResetEmail(email: string, name: string, token:
 
                     <div style="text-align:center; margin:28px 0;">
                         <a href="${resetUrl}"
-                           style="display:inline-block; background: linear-gradient(135deg, #4c6ef5, #15aabf); color:white; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px; box-shadow: 0 4px 15px rgba(76,110,245,0.35);">
+                           style="display:inline-block; background-color:#4c6ef5; color:#ffffff; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px;">
                             Réinitialiser mon mot de passe
                         </a>
                     </div>
