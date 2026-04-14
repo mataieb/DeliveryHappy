@@ -293,11 +293,11 @@ export default function PreferencesClient({ user }: { user: UserProps }) {
             )}
 
             <Tabs defaultValue={defaultTab}>
-                <Tabs.List mb="xl">
-                    <Tabs.Tab value="info" leftSection={<IconUser size={16} />}>Informations</Tabs.Tab>
-                    <Tabs.Tab value="addresses" leftSection={<IconMapPin size={16} />}>Mes adresses</Tabs.Tab>
-                    <Tabs.Tab value="tupperware" leftSection={<IconBox size={16} />}>Tupperwares</Tabs.Tab>
-                    <Tabs.Tab value="preferences" leftSection={<IconLeaf size={16} />}>Préférences</Tabs.Tab>
+                <Tabs.List mb="xl" style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
+                    <Tabs.Tab value="info" leftSection={<IconUser size={16} />} style={{ whiteSpace: 'nowrap' }}>Profil</Tabs.Tab>
+                    <Tabs.Tab value="addresses" leftSection={<IconMapPin size={16} />} style={{ whiteSpace: 'nowrap' }}>Adresses</Tabs.Tab>
+                    <Tabs.Tab value="tupperware" leftSection={<IconBox size={16} />} style={{ whiteSpace: 'nowrap' }}>Tupperwares</Tabs.Tab>
+                    <Tabs.Tab value="preferences" leftSection={<IconLeaf size={16} />} style={{ whiteSpace: 'nowrap' }}>Préférences</Tabs.Tab>
                 </Tabs.List>
 
                 {/* ───── INFORMATIONS PERSONNELLES ───── */}
@@ -316,7 +316,6 @@ export default function PreferencesClient({ user }: { user: UserProps }) {
                                     label="Email"
                                     value={user.email}
                                     disabled
-                                    description="Non modifiable"
                                 />
                                 <TextInput
                                     label="Téléphone"
@@ -516,7 +515,7 @@ export default function PreferencesClient({ user }: { user: UserProps }) {
                         <Stack gap="sm">
                             <Switch
                                 label="Menu de la semaine"
-                                description="Recevez le menu chaque semaine avant l'heure limite de commande"
+                                description="Recevez le menu chaque semaine à sa publication"
                                 checked={emailMenuWeekly}
                                 onChange={(e) => setEmailMenuWeekly(e.currentTarget.checked)}
                             />

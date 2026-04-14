@@ -108,7 +108,7 @@ export function UserNav() {
                                 Commandes
                             </Button>
                             <Button size="sm" component={Link} href="/preferences" variant={pathname === '/preferences' ? 'filled' : 'subtle'}>
-                                Préférences
+                                Profil
                             </Button>
                         </Group>
 
