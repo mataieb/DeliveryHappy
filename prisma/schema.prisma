@@ -101,6 +101,46 @@ model DeliveryZone {
   updatedAt DateTime @updatedAt
 }
 
+// ─── Dish Library (NEW) ────────────────────────────────────────────────────────
+// Central repository of reusable dishes. Can be used to populate menus.
+
+model DishLibraryItem {
+  id             String          @id @default(cuid())
+  name           String
+  description    String?
+  ingredients    String?
+  imageUrl       String?
+  category       ItemCategory    @default(MAIN)
+  dietaryOptions DietaryOption[]
+  spiceLevel     String?
+  suggestedPrice Float           @default(0)
+  optionGroups   DishOptionGroup[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model DishOptionGroup {
+  id            String          @id @default(cuid())
+  name          String
+  isRequired    Boolean         @default(false)
+  allowMultiple Boolean         @default(false)
+  maxOptions    Int?
+  dish          DishLibraryItem @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  dishId        String
+  options       DishOptionItem[]
+}
+
+model DishOptionItem {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  price       Float           @default(0)
+  group       DishOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     String
+}
+
+// ─── Menu & Items (EXISTING STRUCTURE) ────────────────────────────────────────
+
 model Menu {
   id               String        @id @default(cuid())
   date             DateTime      @unique
@@ -162,6 +202,8 @@ enum DietaryOption {
   HALAL
   GLUTEN_FREE
   SPICY
+  PROTEIN   // Supplément Protéines (option configurable par menu)
+  COMPLETE  // Version Complète (ex: riz complet, pâtes complètes)
 }
 
 model Order {
@@ -238,3 +280,4 @@ model AppSetting {
   value     String         // JSON-encoded value, e.g. "true" or "false"
   updatedAt DateTime @updatedAt
 }
+

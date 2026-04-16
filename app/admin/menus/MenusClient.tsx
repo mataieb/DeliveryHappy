@@ -18,7 +18,6 @@ import {
     Grid,
     MultiSelect,
     Textarea,
-    Switch,
     Divider,
     Tooltip,
     ThemeIcon,
@@ -38,11 +37,13 @@ import { notifications } from '@mantine/notifications';
 import {
     createMenuAction, updateMenuAction, deleteMenuAction, copyMenuAction,
     sendMenuNotificationAction, sendWeeklyMenuNotificationAction,
-    MenuItemInput, OptionGroupInput, OptionItemInput
+    getDishLibraryAction,
+    MenuItemInput, OptionGroupInput,
 } from './actions';
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import { useState } from 'react';
+import { CreateMenuStepper } from './CreateMenuStepper';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,8 @@ const DIETARY_OPTIONS = [
     { value: 'HALAL', label: 'Halal' },
     { value: 'GLUTEN_FREE', label: 'Sans Gluten' },
     { value: 'SPICY', label: 'Épicé' },
+    { value: 'PROTEIN', label: 'Supplément Protéines' },
+    { value: 'COMPLETE', label: 'Version Complète' },
 ];
 
 const SPICE_PRESETS = [
@@ -102,22 +105,100 @@ type MenuWithItems = {
 };
 
 type MenuItemInputWithUIHelpers = MenuItemInput & {
-    _proteinPrice: number;
-    _hasProtein: boolean;
     _dietaryConfigs: Record<string, { price: number; description: string }>;
     _spicePreset: string;
-    _hasComplet: boolean;
-    _completLabel: string;
-    _completPrice: number;
     spiceLevel: string | null;
 };
 
 const EMPTY_ITEM: MenuItemInputWithUIHelpers = {
     name: '', description: '', ingredients: '', price: 0,
     category: 'MAIN' as any, dietaryOptions: [], optionGroups: [],
-    spiceLevel: null, _proteinPrice: 0, _hasProtein: false, _dietaryConfigs: {}, _spicePreset: '3',
-    _hasComplet: false, _completLabel: '', _completPrice: 0
+    spiceLevel: null, _dietaryConfigs: {}, _spicePreset: '3',
 } as unknown as MenuItemInputWithUIHelpers;
+
+// ─── Select Dish Modal ────────────────────────────────────────────────────────
+
+function SelectDishModal({
+    opened,
+    onClose,
+    dishes,
+    onSelect,
+    category,
+}: {
+    opened: boolean;
+    onClose: () => void;
+    dishes: Array<any>;
+    onSelect: (dish: any) => void;
+    category: 'STARTER' | 'MAIN' | 'DESSERT' | 'DRINK' | null;
+}) {
+    const filteredDishes = category ? dishes.filter(d => d.category === category) : [];
+    const categoryLabel = category ? CATEGORIES.find(c => c.value === category)?.label : '';
+
+    return (
+        <Modal
+            opened={opened}
+            onClose={onClose}
+            title={`Ajouter ${categoryLabel}`}
+            size="lg"
+            radius="md"
+        >
+            <Stack gap="sm">
+                {filteredDishes.length === 0 ? (
+                    <Text c="dimmed">Aucun plat dans cette catégorie. Créez-en d'abord dans Bibliothèque.</Text>
+                ) : (
+                    filteredDishes.map(dish => (
+                        <Card
+                            key={dish.id}
+                            withBorder
+                            p="md"
+                            radius="md"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => {
+                                onSelect(dish);
+                                onClose();
+                            }}
+                        >
+                            <Group justify="space-between" align="flex-start">
+                                <div style={{ flex: 1 }}>
+                                    <Text fw={500}>{dish.name}</Text>
+                                    {dish.description && (
+                                        <Text size="sm" c="dimmed" mt={4}>{dish.description}</Text>
+                                    )}
+                                    {dish.imageUrl && (
+                                        <Box
+                                            component="img"
+                                            src={dish.imageUrl}
+                                            alt={dish.name}
+                                            style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '4px', marginTop: '8px' }}
+                                        />
+                                    )}
+                                    <Group gap={4} mt="xs" wrap="wrap">
+                                        {dish.dietaryOptions.map((tag: string) => {
+                                            const label = DIETARY_OPTIONS.find(o => o.value === tag)?.label || tag;
+                                            let color = 'gray';
+                                            if (tag === 'SPICY') color = 'red';
+                                            else if (tag === 'VEGETARIAN' || tag === 'VEGAN') color = 'green';
+                                            else if (tag === 'GLUTEN_FREE') color = 'yellow';
+                                            return (
+                                                <Badge key={tag} size="xs" variant="outline" color={color}>
+                                                    {label}
+                                                </Badge>
+                                            );
+                                        })}
+                                    </Group>
+                                </div>
+                                <Group gap="xs" wrap="nowrap">
+                                    <Text fw={600}>{dish.suggestedPrice.toFixed(2)}€</Text>
+                                    <IconPlus size={16} />
+                                </Group>
+                            </Group>
+                        </Card>
+                    ))
+                )}
+            </Stack>
+        </Modal>
+    );
+}
 
 // ─── Copy Modal ───────────────────────────────────────────────────────────────
 
@@ -378,11 +459,16 @@ function MenuCard({
 export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; zones: ZoneOption[] }) {
     const isMobile = useMediaQuery('(max-width: 48em)');
     const [opened, { open, close }] = useDisclosure(false);
+    const [stepperOpened, { open: openStepper, close: closeStepper }] = useDisclosure(false);
     const [loading, setLoading] = useState(false);
     const [weeklyNotifying, setWeeklyNotifying] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [copySource, setCopySource] = useState<MenuWithItems | null>(null);
     const [copyOpened, { open: openCopy, close: closeCopy }] = useDisclosure(false);
+    const [dishLibrary, setDishLibrary] = useState<any[]>([]);
+    const [dishLibraryLoading, setDishLibraryLoading] = useState(false);
+    const [dishSelectCategory, setDishSelectCategory] = useState<'STARTER' | 'MAIN' | 'DESSERT' | 'DRINK' | null>(null);
+    const [dishSelectOpened, { open: openDishSelect, close: closeDishSelect }] = useDisclosure(false);
 
     const handleWeeklyNotify = async (menuIds: string[]) => {
         if (!confirm('Envoyer le récapitulatif de cette semaine à tous les utilisateurs ?')) return;
@@ -407,6 +493,43 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
         } finally {
             setWeeklyNotifying(false);
         }
+    };
+
+    const handleOpenDishSelect = async (category: 'STARTER' | 'MAIN' | 'DESSERT' | 'DRINK') => {
+        setDishSelectCategory(category);
+        if (dishLibrary.length === 0 && !dishLibraryLoading) {
+            setDishLibraryLoading(true);
+            try {
+                const res = await getDishLibraryAction();
+                if (res.success) {
+                    setDishLibrary(res.dishes);
+                }
+            } finally {
+                setDishLibraryLoading(false);
+            }
+        }
+        openDishSelect();
+    };
+
+    const handleSelectDish = (dish: any) => {
+        const configs: Record<string, { price: number; description: string }> = {};
+        for (const tag of (dish.dietaryOptions as string[])) {
+            configs[tag] = { price: 0, description: '' };
+        }
+        const newItem: MenuItemInputWithUIHelpers = {
+            id: undefined,
+            name: dish.name,
+            description: dish.description || '',
+            ingredients: dish.ingredients || '',
+            price: dish.suggestedPrice,
+            category: dish.category as any,
+            dietaryOptions: dish.dietaryOptions as any,
+            spiceLevel: dish.spiceLevel || null,
+            optionGroups: [],
+            _dietaryConfigs: configs,
+            _spicePreset: '3',
+        };
+        form.insertListItem('items', newItem);
     };
 
     // ─ Group menus by week (Monday = start) ─
@@ -455,47 +578,51 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
             date: new Date(menu.date),
             deliveryZoneId: menu.deliveryZoneId ?? '',
             items: menu.items.map(item => {
-                let hasProtein = false;
-                let proteinPrice = 0;
                 const dietaryConfigs: Record<string, { price: number; description: string }> = {};
-
-                const proteinGroup = item.optionGroups.find(g => g.name === "Supplément Protéines");
-                if (proteinGroup && proteinGroup.options.length > 0) {
-                    hasProtein = true;
-                    proteinPrice = proteinGroup.options[0].price;
-                }
+                const dietaryOptions = [...item.dietaryOptions];
 
                 const spiceGroup = item.optionGroups.find(g => g.name === "Niveau d'épice");
                 const spicePreset = spiceGroup ? String(spiceGroup.options.length) : '3';
 
-                const completGroup = item.optionGroups.find(g => g.name === "Version Complète");
-                const hasComplet = !!completGroup && completGroup.options.length > 0;
-                const completLabel = hasComplet ? completGroup!.options[0].name : '';
-                const completPrice = hasComplet ? completGroup!.options[0].price : 0;
+                // Backward-compat: lift Protein/Complète from option groups if not already in tags
+                const proteinGroup = item.optionGroups.find(g => g.name === 'Supplément Protéines');
+                if (proteinGroup && proteinGroup.options.length > 0 && !dietaryOptions.includes('PROTEIN')) {
+                    dietaryOptions.push('PROTEIN');
+                }
+                const completGroup = item.optionGroups.find(g => g.name === 'Version Complète');
+                if (completGroup && completGroup.options.length > 0 && !dietaryOptions.includes('COMPLETE')) {
+                    dietaryOptions.push('COMPLETE');
+                }
 
-                const variantGroup = item.optionGroups.find(g => g.name === "Variantes / Régimes");
-                const glutenGroup = item.optionGroups.find(g => g.name === "Option Sans Gluten");
+                const variantGroup = item.optionGroups.find(g => g.name === 'Variantes / Régimes');
+                const glutenGroup = item.optionGroups.find(g => g.name === 'Option Sans Gluten');
 
-                item.dietaryOptions.forEach(tag => {
+                dietaryOptions.forEach(tag => {
                     if (tag === 'SPICY') return;
-                    if (tag === 'GLUTEN_FREE') {
-                        if (glutenGroup && glutenGroup.options.length > 0) {
-                            dietaryConfigs[tag] = {
-                                price: glutenGroup.options[0].price,
-                                description: glutenGroup.options[0].description || ''
-                            };
-                        } else {
-                            dietaryConfigs[tag] = { price: 0, description: '' };
-                        }
-                    } else {
-                        const DIETARY_LABELS_MAP: Record<string, string> = {
-                            'VEGETARIAN': 'Végétarienne', 'VEGAN': 'Végan', 'HALAL': 'Halal',
-                        };
-                        const optionName = `Version ${DIETARY_LABELS_MAP[tag] || tag}`;
-                        const matchingOption = variantGroup?.options.find(o => o.name === optionName);
+
+                    if (tag === 'PROTEIN') {
                         dietaryConfigs[tag] = {
-                            price: matchingOption?.price ?? 0,
-                            description: matchingOption?.description || ''
+                            price: proteinGroup?.options[0]?.price ?? 0,
+                            description: proteinGroup?.options[0]?.name || '',
+                        };
+                    } else if (tag === 'COMPLETE') {
+                        dietaryConfigs[tag] = {
+                            price: completGroup?.options[0]?.price ?? 0,
+                            description: completGroup?.options[0]?.name || '',
+                        };
+                    } else if (tag === 'GLUTEN_FREE') {
+                        dietaryConfigs[tag] = {
+                            price: glutenGroup?.options[0]?.price ?? 0,
+                            description: glutenGroup?.options[0]?.description || '',
+                        };
+                    } else {
+                        // VEGETARIAN, VEGAN, HALAL — look in variant group (legacy) or option groups by name
+                        const legacyGroup = item.optionGroups.find(g => g.name === `Option ${DIETARY_OPTIONS.find(o => o.value === tag)?.label}`);
+                        const legacyLabels: Record<string, string> = { VEGETARIAN: 'Végétarienne', VEGAN: 'Végan', HALAL: 'Halal' };
+                        const legacyOption = variantGroup?.options.find(o => o.name === `Version ${legacyLabels[tag] || tag}`);
+                        dietaryConfigs[tag] = {
+                            price: legacyGroup?.options[0]?.price ?? legacyOption?.price ?? 0,
+                            description: legacyGroup?.options[0]?.description ?? legacyOption?.description ?? '',
                         };
                     }
                 });
@@ -507,16 +634,11 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                     ingredients: item.ingredients || '',
                     price: item.price,
                     category: item.category as any,
-                    dietaryOptions: item.dietaryOptions as any,
+                    dietaryOptions: dietaryOptions as any,
                     spiceLevel: item.spiceLevel || null,
                     optionGroups: [],
-                    _proteinPrice: proteinPrice,
-                    _hasProtein: hasProtein,
                     _dietaryConfigs: dietaryConfigs,
                     _spicePreset: spicePreset,
-                    _hasComplet: hasComplet,
-                    _completLabel: completLabel,
-                    _completPrice: completPrice,
                 } as unknown as MenuItemInputWithUIHelpers;
             }),
         });
@@ -549,89 +671,58 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
         setLoading(true);
         try {
             const processedItems: MenuItemInput[] = values.items.map(item => {
-                const DIETARY_LABELS_MAP: Record<string, string> = {
-                    'VEGETARIAN': 'Végétarienne',
-                    'VEGAN': 'Végan',
-                    'HALAL': 'Halal',
-                    'GLUTEN_FREE': 'Sans Gluten'
-                };
-
                 const optionGroups: OptionGroupInput[] = [];
-                const variantsOptions: OptionItemInput[] = [];
-
-                let proteinGroup: OptionGroupInput | null = null;
-                let spiceGroup: OptionGroupInput | null = null;
-                let glutenFreeGroup: OptionGroupInput | null = null;
-                let completGroup: OptionGroupInput | null = null;
-
-                if (item._hasComplet && item._completLabel.trim()) {
-                    completGroup = {
-                        name: "Version Complète",
-                        isRequired: false,
-                        allowMultiple: false,
-                        maxOptions: 1,
-                        options: [{ name: item._completLabel.trim(), price: item._completPrice, description: undefined }]
-                    };
-                }
-
-                if (item._hasProtein) {
-                    proteinGroup = {
-                        name: "Supplément Protéines",
-                        isRequired: false,
-                        allowMultiple: false,
-                        maxOptions: 1,
-                        options: [{ name: "Extra Protéines", price: item._proteinPrice, description: undefined }]
-                    };
-                }
 
                 item.dietaryOptions.forEach(tag => {
-                    if (tag === 'SPICY') {
-                        const preset = SPICE_PRESETS.find(p => p.value === item._spicePreset) ?? SPICE_PRESETS[1];
-                        spiceGroup = {
-                            name: "Niveau d'épice",
-                            isRequired: true,
-                            allowMultiple: false,
-                            maxOptions: 1,
-                            options: preset.options.map(name => ({ name, price: 0, description: undefined }))
-                        };
-                        return;
-                    }
-
                     const config = item._dietaryConfigs[tag];
                     const optionPrice = config ? Number(config.price) || 0 : 0;
                     const optionDesc = config?.description?.trim() || undefined;
 
-                    if (tag === 'GLUTEN_FREE') {
-                        glutenFreeGroup = {
-                            name: "Option Sans Gluten",
+                    if (tag === 'SPICY') {
+                        const preset = SPICE_PRESETS.find(p => p.value === item._spicePreset) ?? SPICE_PRESETS[1];
+                        optionGroups.push({
+                            name: "Niveau d'épice",
+                            isRequired: true,
+                            allowMultiple: false,
+                            maxOptions: 1,
+                            options: preset.options.map(name => ({ name, price: 0, description: undefined })),
+                        });
+                    } else if (tag === 'PROTEIN') {
+                        optionGroups.push({
+                            name: 'Supplément Protéines',
                             isRequired: false,
                             allowMultiple: false,
                             maxOptions: 1,
-                            options: [{ name: "Version Sans Gluten", price: optionPrice, description: optionDesc }]
-                        };
+                            options: [{ name: optionDesc || 'Extra Protéines', price: optionPrice, description: undefined }],
+                        });
+                    } else if (tag === 'COMPLETE') {
+                        optionGroups.push({
+                            name: 'Version Complète',
+                            isRequired: false,
+                            allowMultiple: false,
+                            maxOptions: 1,
+                            options: [{ name: optionDesc || 'Version Complète', price: optionPrice, description: undefined }],
+                        });
+                    } else if (tag === 'GLUTEN_FREE') {
+                        optionGroups.push({
+                            name: 'Option Sans Gluten',
+                            isRequired: false,
+                            allowMultiple: false,
+                            maxOptions: 1,
+                            options: [{ name: optionDesc || 'Version Sans Gluten', price: optionPrice, description: undefined }],
+                        });
                     } else {
-                        variantsOptions.push({
-                            name: `Version ${DIETARY_LABELS_MAP[tag] || tag}`,
-                            price: optionPrice,
-                            description: optionDesc
+                        // VEGETARIAN, VEGAN, HALAL
+                        const label = DIETARY_OPTIONS.find(o => o.value === tag)?.label || tag;
+                        optionGroups.push({
+                            name: `Option ${label}`,
+                            isRequired: false,
+                            allowMultiple: false,
+                            maxOptions: 1,
+                            options: [{ name: optionDesc || `Version ${label}`, price: optionPrice, description: undefined }],
                         });
                     }
                 });
-
-                if (variantsOptions.length > 0) {
-                    optionGroups.push({
-                        name: "Variantes / Régimes",
-                        isRequired: false,
-                        allowMultiple: false,
-                        maxOptions: 1,
-                        options: variantsOptions
-                    });
-                }
-
-                if (completGroup) optionGroups.push(completGroup);
-                if (proteinGroup) optionGroups.push(proteinGroup);
-                if (spiceGroup) optionGroups.push(spiceGroup);
-                if (glutenFreeGroup) optionGroups.push(glutenFreeGroup);
 
                 return {
                     id: item.id,
@@ -680,7 +771,7 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
         <Container fluid>
             <Group justify="space-between" mb="lg">
                 <Title order={2}>Gestion des Menus</Title>
-                <Button leftSection={<IconPlus size={14} />} onClick={open}>Nouveau Menu</Button>
+                <Button leftSection={<IconPlus size={14} />} onClick={openStepper}>Nouveau Menu</Button>
             </Group>
 
             {menus.length === 0 ? (
@@ -756,6 +847,17 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                     })}
                 </Accordion>
             )}
+
+            {/* ── Create Menu Stepper (quick creation from library) ── */}
+            <CreateMenuStepper
+                opened={stepperOpened}
+                onClose={closeStepper}
+                zones={zones}
+                onSuccess={() => {
+                    // Optionally refetch menus here or use router.refresh()
+                    window.location.reload();
+                }}
+            />
 
             {/* ── Create / Edit modal ── */}
             <Modal opened={opened} onClose={handleClose} title={editingId ? "Modifier le menu" : "Créer un nouveau menu"} size="xl" fullScreen={isMobile}>
@@ -843,52 +945,6 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                                                 }}
                                             />
 
-                                            <Group mt="xs">
-                                                <Switch
-                                                    label="Proposer supplément Protéines ?"
-                                                    {...form.getInputProps(`items.${index}._hasProtein`, { type: 'checkbox' })}
-                                                />
-                                                {form.values.items[index]._hasProtein && (
-                                                    <NumberInput
-                                                        placeholder="Prix supp."
-                                                        size="xs"
-                                                        w={100}
-                                                        min={0}
-                                                        decimalScale={2}
-                                                        fixedDecimalScale
-                                                        suffix=" €"
-                                                        {...form.getInputProps(`items.${index}._proteinPrice`)}
-                                                    />
-                                                )}
-                                            </Group>
-
-                                            <Group mt="xs" align="flex-end">
-                                                <Switch
-                                                    label="Proposer une version complète ?"
-                                                    {...form.getInputProps(`items.${index}._hasComplet`, { type: 'checkbox' })}
-                                                />
-                                                {form.values.items[index]._hasComplet && (
-                                                    <>
-                                                        <TextInput
-                                                            placeholder="Ex: Riz complet, Pâtes complètes…"
-                                                            size="xs"
-                                                            style={{ flex: 1 }}
-                                                            {...form.getInputProps(`items.${index}._completLabel`)}
-                                                        />
-                                                        <NumberInput
-                                                            placeholder="Prix supp."
-                                                            size="xs"
-                                                            w={100}
-                                                            min={0}
-                                                            decimalScale={2}
-                                                            fixedDecimalScale
-                                                            suffix=" €"
-                                                            {...form.getInputProps(`items.${index}._completPrice`)}
-                                                        />
-                                                    </>
-                                                )}
-                                            </Group>
-
                                             {form.values.items[index].dietaryOptions.length > 0 && (
                                                 <Stack mt="md" gap="xs">
                                                     <Text size="sm" fw={500}>Configuration des Tags :</Text>
@@ -945,9 +1001,36 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                             </Card>
                         ))}
 
-                        <Button variant="outline" onClick={addItem} leftSection={<IconPlus size={14} />}>
-                            Ajouter un plat
-                        </Button>
+                        <Group gap="sm">
+                            <Button
+                                variant="light"
+                                onClick={() => handleOpenDishSelect('STARTER')}
+                                leftSection={<IconPlus size={14} />}
+                            >
+                                Entrée
+                            </Button>
+                            <Button
+                                variant="light"
+                                onClick={() => handleOpenDishSelect('MAIN')}
+                                leftSection={<IconPlus size={14} />}
+                            >
+                                Plat
+                            </Button>
+                            <Button
+                                variant="light"
+                                onClick={() => handleOpenDishSelect('DESSERT')}
+                                leftSection={<IconPlus size={14} />}
+                            >
+                                Dessert
+                            </Button>
+                            <Button
+                                variant="light"
+                                onClick={() => handleOpenDishSelect('DRINK')}
+                                leftSection={<IconPlus size={14} />}
+                            >
+                                Boisson
+                            </Button>
+                        </Group>
 
                         <Group justify="flex-end" mt="xl">
                             <Button variant="default" onClick={handleClose}>Annuler</Button>
@@ -958,6 +1041,15 @@ export default function MenusClient({ menus, zones }: { menus: MenuWithItems[]; 
                     </Stack>
                 </form>
             </Modal>
+
+            {/* ── Select Dish Modal ── */}
+            <SelectDishModal
+                opened={dishSelectOpened}
+                onClose={closeDishSelect}
+                dishes={dishLibrary}
+                onSelect={handleSelectDish}
+                category={dishSelectCategory}
+            />
 
             {/* ── Copy Modal ── */}
             <CopyMenuModal

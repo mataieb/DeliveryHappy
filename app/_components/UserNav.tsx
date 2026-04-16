@@ -45,6 +45,9 @@ export function UserNav() {
                             <Button size="sm" component={Link} href="/admin/menus" variant={pathname?.startsWith('/admin/menus') ? 'filled' : 'subtle'} leftSection={<IconCalendar size={14} />}>
                                 Menus
                             </Button>
+                            <Button size="sm" component={Link} href="/admin/dishes" variant={pathname?.startsWith('/admin/dishes') ? 'filled' : 'subtle'} leftSection={<IconCalendar size={14} />}>
+                                Bibliothèque
+                            </Button>
                             <Button size="sm" component={Link} href="/admin/orders" variant={pathname?.startsWith('/admin/orders') ? 'filled' : 'subtle'} leftSection={<IconReceipt size={14} />}>
                                 Commandes
                             </Button>

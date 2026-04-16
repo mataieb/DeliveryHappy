@@ -9,6 +9,23 @@ import { sendMenuNotificationEmails, sendWeeklyMenuNotificationEmails } from '@/
 import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 
+export async function getDishLibraryAction() {
+    try {
+        const dishes = await prisma.dishLibraryItem.findMany({
+            orderBy: { name: 'asc' },
+            include: {
+                optionGroups: {
+                    include: { options: true }
+                }
+            }
+        });
+        return { success: true, dishes };
+    } catch (error) {
+        console.error('[getDishLibrary] Error:', error);
+        return { success: false, error: 'Erreur lors du chargement', dishes: [] };
+    }
+}
+
 
 export type OptionItemInput = {
     id?: string;
@@ -38,6 +55,9 @@ export type MenuItemInput = {
     optionGroups: OptionGroupInput[];
 };
 
+// Note: MenuItem stores a full copy of dish data (name, price, dietaryOptions, optionGroups).
+// There is NO link between MenuItem and DishLibraryItem after creation.
+// Modifying a dish in the library never affects menus already created.
 export async function createMenuAction(date: Date, items: MenuItemInput[], deliveryZoneId?: string | null) {
     try {
         const startOfDay = new Date(date);
