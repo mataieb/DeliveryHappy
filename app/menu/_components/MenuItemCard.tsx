@@ -1,6 +1,6 @@
 "use client";
 
-import { MenuItem as MenuItemType, ItemCategory, DietaryOption } from "@prisma/client";
+import { MenuItem as MenuItemType, ItemCategory } from "@prisma/client";
 import { Text, Badge, Button, Group, rem } from "@mantine/core";
 import { IconLeaf, IconPepper, IconDisabled, IconShoppingCartPlus, IconSalad, IconCake, IconGlass, IconToolsKitchen2 } from "@tabler/icons-react";
 
@@ -22,6 +22,7 @@ type OptionGroup = {
 };
 
 export type MenuItemWithOptions = MenuItemType & {
+    dietaryOptions: string[];
     optionGroups: OptionGroup[];
 };
 
@@ -39,13 +40,18 @@ export const CATEGORY_CONFIG: Record<ItemCategory, { label: string; bg: string; 
     DRINK:   { label: 'Boisson', bg: '#f59f00', icon: <IconGlass size={22} color="white" /> },
 };
 
-const DIETARY_CONFIG: Partial<Record<DietaryOption, { label: string; color: string; icon: React.ReactNode }>> = {
-    VEGETARIAN: { label: 'Végétarien', color: 'green',  icon: <IconLeaf style={{ width: rem(11), height: rem(11) }} /> },
-    VEGAN:      { label: 'Vegan',      color: 'teal',   icon: <IconLeaf style={{ width: rem(11), height: rem(11) }} /> },
-    GLUTEN_FREE:{ label: 'Sans gluten',color: 'orange', icon: <IconDisabled style={{ width: rem(11), height: rem(11) }} /> },
-    SPICY:      { label: 'Épicé',      color: 'red',    icon: <IconPepper style={{ width: rem(11), height: rem(11) }} /> },
-    HALAL:      { label: 'Halal',      color: 'grape',  icon: <Text size="xs" fw={800} lh={1}>H</Text> },
+// Record<string, ...> pour rester indépendant du client Prisma généré
+const DIETARY_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+    VEGETARIAN: { label: 'Végétarien',  color: 'green',  icon: <IconLeaf style={{ width: rem(11), height: rem(11) }} /> },
+    VEGAN:      { label: 'Vegan',       color: 'teal',   icon: <IconLeaf style={{ width: rem(11), height: rem(11) }} /> },
+    HALAL:      { label: 'Halal',       color: 'grape',  icon: <Text size="xs" fw={800} lh={1}>H</Text> },
+    GLUTEN_FREE:{ label: 'Sans gluten', color: 'orange', icon: <IconDisabled style={{ width: rem(11), height: rem(11) }} /> },
+    COMPLETE:   { label: 'Complet',     color: 'teal',   icon: <Text size="xs" fw={800} lh={1}>C</Text> },
+    PROTEIN:    { label: 'Xtra prot.',  color: 'blue',   icon: <Text size="xs" fw={800} lh={1}>+</Text> },
+    SPICY:      { label: 'Épicé',       color: 'red',    icon: <IconPepper style={{ width: rem(11), height: rem(11) }} /> },
 };
+
+const DIETARY_ORDER = ['VEGETARIAN', 'VEGAN', 'HALAL', 'GLUTEN_FREE', 'COMPLETE', 'PROTEIN', 'SPICY'];
 
 export default function MenuItemCard({ item, onAdd, canOrder = true, isBlocked = false }: MenuItemCardProps) {
     const config = CATEGORY_CONFIG[item.category] ?? { label: item.category, bg: '#868e96', icon: null };
@@ -96,15 +102,21 @@ export default function MenuItemCard({ item, onAdd, canOrder = true, isBlocked =
                         {item.optionGroups && item.optionGroups.length > 0 && (
                             <Text size="xs" c="dimmed">{item.optionGroups.length > 1 ? 'Options :' : 'Option :'}</Text>
                         )}
-                        {item.dietaryOptions && item.dietaryOptions.map((opt) => {
-                            const d = DIETARY_CONFIG[opt];
-                            if (!d) return null;
-                            return (
-                                <Badge key={opt} color={d.color} variant="light" size="xs" leftSection={d.icon}>
-                                    {d.label}
-                                </Badge>
-                            );
-                        })}
+                        {item.dietaryOptions && [...item.dietaryOptions]
+                            .sort((a, b) => {
+                                const ia = DIETARY_ORDER.indexOf(a);
+                                const ib = DIETARY_ORDER.indexOf(b);
+                                return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+                            })
+                            .map((opt) => {
+                                const d = DIETARY_CONFIG[opt];
+                                if (!d) return null;
+                                return (
+                                    <Badge key={opt} color={d.color} variant="light" size="xs" leftSection={d.icon}>
+                                        {d.label}
+                                    </Badge>
+                                );
+                            })}
                     </Group>
                 )}
 
