@@ -30,11 +30,20 @@ export default async function MenuPage() {
     const startOfWeek = today.startOf('week').add(1, 'day').toDate();
     const endOfWeek = today.endOf('week').add(8, 'day').toDate(); // 2 semaines
 
-    const openPolls = await prisma.poll.findMany({
+    const allOpenPolls = await prisma.poll.findMany({
         where: { status: 'OPEN' },
         select: { id: true, title: true },
         orderBy: { createdAt: 'desc' },
     });
+
+    const votedPollIds = allOpenPolls.length > 0
+        ? (await prisma.pollVote.findMany({
+            where: { pollId: { in: allOpenPolls.map(p => p.id) }, userId: session.user.id },
+            select: { pollId: true },
+        })).map(v => v.pollId)
+        : [];
+
+    const openPolls = allOpenPolls.filter(p => !votedPollIds.includes(p.id));
 
     const menus = await prisma.menu.findMany({
         where: { date: { gte: startOfWeek, lte: endOfWeek } },
