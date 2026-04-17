@@ -32,7 +32,13 @@ export async function POST(req: NextRequest) {
             data: { identifier, token: hashedToken, expires },
         });
 
-        await sendPasswordResetEmail(normalizedEmail, user.name ?? normalizedEmail, plainToken);
+        const emailResult = await sendPasswordResetEmail(normalizedEmail, user.name ?? normalizedEmail, plainToken);
+
+        if (!emailResult.success) {
+            console.error('[forgot-password] Email non envoyé:', emailResult.error);
+            // On retourne quand même success à l'utilisateur pour ne pas révéler
+            // l'état interne, mais l'erreur est loggée côté serveur.
+        }
 
         return NextResponse.json({ success: true });
     } catch (error) {

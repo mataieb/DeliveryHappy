@@ -115,13 +115,29 @@ export async function sendMenuNotificationEmails(
     const html = buildMenuEmailHtml(menuDate, items);
     const testRecipient = process.env.RESEND_TEST_RECIPIENT;
 
+    const textBody = [
+        `Menu du ${menuDate} - Taieb's Kitchen`,
+        '',
+        `Bonjour,`,
+        `Le menu du ${menuDate} est disponible !`,
+        '',
+        ...items.map(i => `- ${i.name} : ${i.price.toFixed(2)} €`),
+        '',
+        `Commander : ${APP_URL}/menu`,
+        '',
+        `Les commandes ferment la veille a 21h00.`,
+        `Taieb's Kitchen`,
+    ].join('\n');
+
     // ── Test mode: redirect all emails to a single address ──────────────────
     if (testRecipient) {
         const { data, error } = await resend.emails.send({
             from: FROM_EMAIL,
             to: testRecipient,
-            subject: `🍽️ Menu du ${menuDate} — Passez votre commande !`,
+            replyTo: FROM_EMAIL,
+            subject: `Menu du ${menuDate} - Taieb's Kitchen`,
             html,
+            text: textBody,
         });
         if (error) {
             console.error('[Resend] API error (test mode):', JSON.stringify(error));
@@ -145,8 +161,13 @@ export async function sendMenuNotificationEmails(
                 chunk.map(r => ({
                     from: FROM_EMAIL,
                     to: r.email,
-                    subject: `🍽️ Menu du ${menuDate} — Passez votre commande !`,
+                    replyTo: FROM_EMAIL,
+                    subject: `Menu du ${menuDate} - Taieb's Kitchen`,
                     html,
+                    text: textBody,
+                    headers: {
+                        'List-Unsubscribe': `<mailto:${FROM_EMAIL.match(/<(.+)>/)?.[1] ?? FROM_EMAIL}?subject=unsubscribe>`,
+                    },
                 }))
             );
 
@@ -168,10 +189,10 @@ export async function sendMenuNotificationEmails(
 
 // ─── Email verification template ─────────────────────────────────────────────
 
-export async function sendVerificationEmail(email: string, name: string, token: string) {
+export async function sendVerificationEmail(email: string, name: string, token: string): Promise<{ success: boolean; error?: string }> {
     if (!process.env.RESEND_API_KEY) {
         console.error('[Resend] RESEND_API_KEY non configurée.');
-        return;
+        return { success: false, error: 'RESEND_API_KEY manquante' };
     }
 
     const verificationUrl = `${APP_URL}/api/auth/verify-email?token=${token}`;
@@ -186,7 +207,6 @@ export async function sendVerificationEmail(email: string, name: string, token: 
 
                 <!-- Header -->
                 <tr><td style="background: linear-gradient(135deg, #4c6ef5 0%, #15aabf 100%); border-radius:16px 16px 0 0; padding:32px; text-align:center;">
-                    <div style="font-size:40px; margin-bottom:12px;">✉️</div>
                     <h1 style="margin:0; color:white; font-size:22px; font-weight:700; letter-spacing:-0.5px;">
                         Confirmez votre email
                     </h1>
@@ -230,24 +250,30 @@ export async function sendVerificationEmail(email: string, name: string, token: 
 </body>
 </html>`;
 
+    const text = `Bonjour ${name},\n\nMerci pour votre inscription à Taieb's Kitchen !\n\nConfirmez votre email en cliquant sur ce lien :\n${verificationUrl}\n\nCe lien expire dans 24 heures.\nSi vous n'avez pas créé de compte, ignorez cet email.`;
+
     const { error } = await resend.emails.send({
         from: FROM_EMAIL,
         to: email,
-        subject: "Confirmez votre email — Taieb's Kitchen",
+        replyTo: FROM_EMAIL,
+        subject: "Confirmez votre email - Taieb's Kitchen",
         html,
+        text,
     });
 
     if (error) {
         console.error('[Resend] Erreur envoi email vérification:', JSON.stringify(error));
+        return { success: false, error: error.message };
     }
+    return { success: true };
 }
 
 // ─── Password reset email ─────────────────────────────────────────────────────
 
-export async function sendPasswordResetEmail(email: string, name: string, token: string) {
+export async function sendPasswordResetEmail(email: string, name: string, token: string): Promise<{ success: boolean; error?: string }> {
     if (!process.env.RESEND_API_KEY) {
         console.error('[Resend] RESEND_API_KEY non configurée.');
-        return;
+        return { success: false, error: 'RESEND_API_KEY manquante' };
     }
 
     const resetUrl = `${APP_URL}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
@@ -262,9 +288,8 @@ export async function sendPasswordResetEmail(email: string, name: string, token:
 
                 <!-- Header -->
                 <tr><td style="background: linear-gradient(135deg, #4c6ef5 0%, #15aabf 100%); border-radius:16px 16px 0 0; padding:32px; text-align:center;">
-                    <div style="font-size:40px; margin-bottom:12px;">🔒</div>
                     <h1 style="margin:0; color:white; font-size:22px; font-weight:700; letter-spacing:-0.5px;">
-                        Réinitialisation du mot de passe
+                        Reinitialisation du mot de passe
                     </h1>
                     <p style="margin:8px 0 0; color:rgba(255,255,255,0.85); font-size:14px;">
                         Taieb's Kitchen
@@ -277,19 +302,19 @@ export async function sendPasswordResetEmail(email: string, name: string, token:
                         Bonjour <strong>${name}</strong>,
                     </p>
                     <p style="margin:0 0 24px; color:#495057; font-size:15px; line-height:1.6;">
-                        Vous avez demandé à réinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.
+                        Vous avez demande a reinitialiser votre mot de passe. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.
                     </p>
 
                     <div style="text-align:center; margin:28px 0;">
                         <a href="${resetUrl}"
                            style="display:inline-block; background-color:#4c6ef5; color:#ffffff; text-decoration:none; padding:14px 36px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px;">
-                            Réinitialiser mon mot de passe
+                            Reinitialiser mon mot de passe
                         </a>
                     </div>
 
                     <p style="margin:24px 0 0; color:#adb5bd; font-size:12px; line-height:1.6; text-align:center;">
                         Ce lien expire dans <strong>1 heure</strong>.<br/>
-                        Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.
+                        Si vous n'avez pas demande cette reinitialisation, ignorez cet email.
                     </p>
                 </td></tr>
 
@@ -306,16 +331,22 @@ export async function sendPasswordResetEmail(email: string, name: string, token:
 </body>
 </html>`;
 
+    const text = `Bonjour ${name},\n\nVous avez demande a reinitialiser votre mot de passe sur Taieb's Kitchen.\n\nCliquez sur ce lien pour choisir un nouveau mot de passe :\n${resetUrl}\n\nCe lien expire dans 1 heure.\nSi vous n'avez pas demande cette reinitialisation, ignorez cet email.`;
+
     const { error } = await resend.emails.send({
         from: FROM_EMAIL,
         to: email,
-        subject: "Réinitialisation de votre mot de passe — Taieb's Kitchen",
+        replyTo: FROM_EMAIL,
+        subject: "Reinitialisation de votre mot de passe - Taieb's Kitchen",
         html,
+        text,
     });
 
     if (error) {
         console.error('[Resend] Erreur envoi email reset password:', JSON.stringify(error));
+        return { success: false, error: error.message };
     }
+    return { success: true };
 }
 
 // ─── Weekly email template ────────────────────────────────────────────────────
@@ -448,13 +479,31 @@ export async function sendWeeklyMenuNotificationEmails(
     const html = buildWeeklyMenuEmailHtml(weekLabel, days);
     const testRecipient = process.env.RESEND_TEST_RECIPIENT;
 
+    const weeklyTextBody = [
+        `Menus de la semaine ${weekLabel} - Taieb's Kitchen`,
+        '',
+        `Bonjour,`,
+        `Voici le programme de la semaine chez Taieb's Kitchen.`,
+        '',
+        ...days.map(d => [
+            `=== ${d.date} ===`,
+            ...d.items.map(i => `- ${i.name} : ${i.price.toFixed(2)} €`),
+        ].join('\n')),
+        '',
+        `Commander : ${APP_URL}/menu`,
+        `Les commandes ferment chaque jour la veille a 21h00.`,
+        `Taieb's Kitchen`,
+    ].join('\n');
+
     // ── Test mode ────────────────────────────────────────────────────────────
     if (testRecipient) {
         const { data, error } = await resend.emails.send({
             from: FROM_EMAIL,
             to: testRecipient,
-            subject: `🗓️ Menus de la semaine — ${weekLabel}`,
+            replyTo: FROM_EMAIL,
+            subject: `Menus de la semaine ${weekLabel} - Taieb's Kitchen`,
             html,
+            text: weeklyTextBody,
         });
         if (error) return { success: false, error: `Resend : ${error.message}` };
         console.log('[Resend] Weekly test email sent, id:', data?.id);
@@ -472,8 +521,13 @@ export async function sendWeeklyMenuNotificationEmails(
                 chunk.map(r => ({
                     from: FROM_EMAIL,
                     to: r.email,
-                    subject: `🗓️ Menus de la semaine — ${weekLabel}`,
+                    replyTo: FROM_EMAIL,
+                    subject: `Menus de la semaine ${weekLabel} - Taieb's Kitchen`,
                     html,
+                    text: weeklyTextBody,
+                    headers: {
+                        'List-Unsubscribe': `<mailto:${FROM_EMAIL.match(/<(.+)>/)?.[1] ?? FROM_EMAIL}?subject=unsubscribe>`,
+                    },
                 }))
             );
             if (error) return { success: false, error: `Resend : ${error.message}` };
