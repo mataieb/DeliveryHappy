@@ -1,4 +1,4 @@
-import { Container, Title } from "@mantine/core";
+import { Container, Title, Alert, Group, Text } from "@mantine/core";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import dayjs from "dayjs";
 import MenuList from "./_components/MenuList";
 import { pointInPolygon, type ZonePoint } from "@/lib/geo";
+import Link from "next/link";
+import { IconClipboardList } from "@tabler/icons-react";
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +29,12 @@ export default async function MenuPage() {
     const today = dayjs();
     const startOfWeek = today.startOf('week').add(1, 'day').toDate();
     const endOfWeek = today.endOf('week').add(8, 'day').toDate(); // 2 semaines
+
+    const openPolls = await prisma.poll.findMany({
+        where: { status: 'OPEN' },
+        select: { id: true, title: true },
+        orderBy: { createdAt: 'desc' },
+    });
 
     const menus = await prisma.menu.findMany({
         where: { date: { gte: startOfWeek, lte: endOfWeek } },
@@ -77,6 +85,21 @@ export default async function MenuPage() {
 
     return (
         <Container size="lg" pt="xs" pb={{ base: 120, sm: 100 }}>
+            {openPolls.map((poll: { id: string; title: string }) => (
+                <Link key={poll.id} href={`/polls/${poll.id}`} style={{ textDecoration: 'none' }}>
+                    <Alert
+                        icon={<IconClipboardList size={18} />}
+                        color="blue"
+                        mb="md"
+                        style={{ cursor: 'pointer' }}
+                    >
+                        <Group justify="space-between" wrap="nowrap">
+                            <Text size="sm" fw={500}>{poll.title}</Text>
+                            <Text size="xs" c="blue">Voter →</Text>
+                        </Group>
+                    </Alert>
+                </Link>
+            ))}
             <Title order={3} mb="md">Menus</Title>
             <MenuList menus={menus} zoneStatusByMenuId={zoneStatusByMenuId} validAddressLabelsByMenuId={validAddressLabelsByMenuId} />
         </Container>

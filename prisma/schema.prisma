@@ -26,6 +26,7 @@ model User {
   orders        Order[]
   addresses     Address[]
   dietaryPreferences DietaryOption[]
+  pollVotes     PollVote[]
   phoneNumber      String?
   containerBalance Int       @default(0)
   defaultPackaging Packaging @default(CARDBOARD)
@@ -115,6 +116,7 @@ model DishLibraryItem {
   spiceLevel     String?
   suggestedPrice Float           @default(0)
   optionGroups   DishOptionGroup[]
+  pollOptions    PollOption[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -279,5 +281,96 @@ model AppSetting {
   key       String   @id   // e.g. "tupperware_enabled"
   value     String         // JSON-encoded value, e.g. "true" or "false"
   updatedAt DateTime @updatedAt
+}
+
+// ─── Polls & Votes ─────────────────────────────────────────────────────────────
+
+enum PollStatus {
+  DRAFT  // Non visible par les users
+  OPEN   // Votes ouverts
+  CLOSED // Votes fermés, résultats visibles
+}
+
+enum PollQuestionType {
+  RANKED_CHOICE    // L'user peut classer les options (rang 1, 2, 3…) — classement partiel autorisé
+  SINGLE_CHOICE    // L'user choisit une seule option
+  MULTIPLE_CHOICE  // L'user choisit plusieurs options sans rang
+}
+
+model Poll {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  status      PollStatus     @default(DRAFT)
+  openAt      DateTime?      // Ouverture automatique (optionnel)
+  closeAt     DateTime?      // Fermeture automatique (optionnel)
+  questions   PollQuestion[]
+  votes       PollVote[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PollQuestion {
+  id       String           @id @default(cuid())
+  poll     Poll             @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  pollId   String
+  text     String
+  type     PollQuestionType @default(RANKED_CHOICE)
+  order    Int              @default(0)
+  options  PollOption[]
+  answers  PollAnswer[]
+}
+
+model PollOption {
+  id                String           @id @default(cuid())
+  question          PollQuestion     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  questionId        String
+  text              String
+  imageUrl          String?
+  order             Int              @default(0)
+  // Lien optionnel vers la bibliothèque de plats (pour les sondages de menus)
+  dishLibraryItem   DishLibraryItem? @relation(fields: [dishLibraryItemId], references: [id], onDelete: SetNull)
+  dishLibraryItemId String?
+  selections        PollAnswerSelection[]
+}
+
+// Un vote par utilisateur par sondage — non modifiable après soumission
+model PollVote {
+  id          String       @id @default(cuid())
+  poll        Poll         @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  pollId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  // Poids du vote : 1.0 par défaut. Modifiable par un admin (ex: top user du mois)
+  weight      Float        @default(1.0)
+  submittedAt DateTime     @default(now())
+  answers     PollAnswer[]
+
+  @@unique([pollId, userId])
+}
+
+// Réponse d'un utilisateur à une question donnée (contient ses sélections)
+model PollAnswer {
+  id         String                @id @default(cuid())
+  vote       PollVote              @relation(fields: [voteId], references: [id], onDelete: Cascade)
+  voteId     String
+  question   PollQuestion          @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  questionId String
+  selections PollAnswerSelection[]
+
+  @@unique([voteId, questionId])
+}
+
+// Une option sélectionnée dans une réponse, avec rang optionnel
+model PollAnswerSelection {
+  id       String     @id @default(cuid())
+  answer   PollAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  answerId String
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  optionId String
+  // Pour RANKED_CHOICE : 1 = premier choix, 2 = deuxième… null = sélectionné sans rang
+  rank     Int?
+
+  @@unique([answerId, optionId])
 }
 

@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "import-dishes": "npx tsx scripts/importExistingDishesToLibrary.ts"
   },
   "dependencies": {
     "@mantine/core": "^8.3.14",

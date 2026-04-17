@@ -179,8 +179,9 @@ export default function ItemOptionsModal({ item, opened, onClose, onConfirm }: I
                                 <Checkbox
                                     checked={selections[group.id] === singleOpt.id}
                                     onChange={(e) => {
+                                        const checked = e.currentTarget.checked;
                                         setSelections(prev => {
-                                            if (e.currentTarget.checked) {
+                                            if (checked) {
                                                 return { ...prev, [group.id]: singleOpt.id };
                                             }
                                             const next = { ...prev };
