@@ -5,6 +5,7 @@ import { PollStatus, PollQuestionType } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
+import { sendPollNotificationEmails } from '@/lib/email';
 
 async function assertAdmin() {
     const session = await getServerSession(authOptions);
@@ -121,6 +122,47 @@ export async function updateVoteWeightAction(voteId: string, weight: number) {
         revalidatePath(`/admin/polls/${vote.pollId}`);
         return { success: true };
     } catch (e: any) {
+        return { success: false, error: e.message || 'Erreur serveur' };
+    }
+}
+
+export async function sendPollNotificationAction(pollId: string) {
+    try {
+        await assertAdmin();
+
+        const poll = await prisma.poll.findUnique({
+            where: { id: pollId },
+            select: { id: true, title: true, description: true, status: true },
+        });
+
+        if (!poll) return { success: false, error: 'Sondage introuvable.' };
+        if (poll.status !== 'OPEN') return { success: false, error: 'Le sondage doit être ouvert pour notifier les utilisateurs.' };
+
+        // Récupère les users qui n'ont pas encore voté
+        const votedUserIds = await prisma.pollVote.findMany({
+            where: { pollId },
+            select: { userId: true },
+        });
+        const votedIds = votedUserIds.map(v => v.userId);
+
+        const users = await prisma.user.findMany({
+            where: {
+                email: { not: undefined },
+                ...(votedIds.length > 0 ? { id: { notIn: votedIds } } : {}),
+            },
+            select: { email: true, name: true },
+        });
+
+        if (users.length === 0) {
+            return { success: false, error: 'Tous les utilisateurs ont déjà voté.' };
+        }
+
+        return await sendPollNotificationEmails(
+            poll,
+            users.map(u => ({ email: u.email!, name: u.name }))
+        );
+    } catch (e: any) {
+        console.error('[sendPollNotification]', e);
         return { success: false, error: e.message || 'Erreur serveur' };
     }
 }

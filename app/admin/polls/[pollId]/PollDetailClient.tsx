@@ -9,12 +9,12 @@ import {
 import { notifications } from '@mantine/notifications';
 import {
     IconArrowLeft, IconLock, IconLockOpen, IconCopy, IconCheck,
-    IconUsers, IconChartBar, IconPencil,
+    IconUsers, IconChartBar, IconPencil, IconBell,
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import { PollStatus, PollQuestionType } from '@prisma/client';
-import { updatePollStatusAction, updateVoteWeightAction } from '../actions';
+import { updatePollStatusAction, updateVoteWeightAction, sendPollNotificationAction } from '../actions';
 
 type PollOption = { id: string; text: string; order: number };
 type PollQuestion = { id: string; text: string; type: PollQuestionType; order: number; options: PollOption[] };
@@ -179,6 +179,7 @@ function VoterRow({ vote, onWeightSave }: { vote: Vote; onWeightSave: (voteId: s
 
 export default function PollDetailClient({ poll }: { poll: Poll }) {
     const [pollUrl, setPollUrl] = useState(`/polls/${poll.id}`);
+    const [notifying, setNotifying] = useState(false);
     useEffect(() => {
         setPollUrl(`${window.location.origin}/polls/${poll.id}`);
     }, [poll.id]);
@@ -191,6 +192,21 @@ export default function PollDetailClient({ poll }: { poll: Poll }) {
     const handleWeightSave = async (voteId: string, weight: number) => {
         const res = await updateVoteWeightAction(voteId, weight);
         if (!res.success) notifications.show({ title: 'Erreur', message: res.error, color: 'red' });
+    };
+
+    const handleNotify = async () => {
+        setNotifying(true);
+        const res = await sendPollNotificationAction(poll.id);
+        setNotifying(false);
+        if (res.success) {
+            notifications.show({
+                title: 'Notifications envoyées',
+                message: `${(res as any).sent} utilisateur${(res as any).sent > 1 ? 's' : ''} notifié${(res as any).sent > 1 ? 's' : ''}`,
+                color: 'green',
+            });
+        } else {
+            notifications.show({ title: 'Erreur', message: (res as any).error, color: 'red' });
+        }
     };
 
     return (
@@ -240,6 +256,18 @@ export default function PollDetailClient({ poll }: { poll: Poll }) {
                         )}
                     </CopyButton>
 
+                    {poll.status === 'OPEN' && (
+                        <Button
+                            size="sm"
+                            color="violet"
+                            variant="light"
+                            leftSection={<IconBell size={14} />}
+                            loading={notifying}
+                            onClick={handleNotify}
+                        >
+                            Notifier les users
+                        </Button>
+                    )}
                     {poll.status !== 'OPEN' && (
                         <Button
                             size="sm"

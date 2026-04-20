@@ -349,6 +349,126 @@ export async function sendPasswordResetEmail(email: string, name: string, token:
     return { success: true };
 }
 
+// ─── Poll notification email ──────────────────────────────────────────────────
+
+export async function sendPollNotificationEmails(
+    poll: { id: string; title: string; description: string | null },
+    recipients: { email: string; name?: string | null }[]
+): Promise<{ success: boolean; error?: string; sent?: number }> {
+    if (!process.env.RESEND_API_KEY) {
+        return { success: false, error: 'RESEND_API_KEY manquante' };
+    }
+    if (recipients.length === 0) {
+        return { success: false, error: 'Aucun utilisateur à notifier.' };
+    }
+
+    const pollUrl = `${APP_URL}/polls/${poll.id}`;
+
+    const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0; padding:0; background:#f8f9fa; font-family: 'Segoe UI', Arial, sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9fa; padding: 32px 16px;">
+        <tr><td align="center">
+            <table width="540" cellpadding="0" cellspacing="0" style="max-width:540px; width:100%;">
+
+                <!-- Header -->
+                <tr><td style="background: linear-gradient(135deg, #4c6ef5 0%, #7950f2 100%); border-radius:16px 16px 0 0; padding:32px; text-align:center;">
+                    <h1 style="margin:0; color:white; font-size:22px; font-weight:700; letter-spacing:-0.5px;">
+                        Un sondage est ouvert !
+                    </h1>
+                    <p style="margin:8px 0 0; color:rgba(255,255,255,0.85); font-size:14px;">
+                        Taieb's Kitchen
+                    </p>
+                </td></tr>
+
+                <!-- Body -->
+                <tr><td style="background:white; padding:32px 28px;">
+                    <p style="margin:0 0 16px; color:#495057; font-size:15px; line-height:1.6;">
+                        Bonjour,
+                    </p>
+                    <p style="margin:0 0 8px; color:#495057; font-size:15px; line-height:1.6;">
+                        Un nouveau sondage est disponible :
+                    </p>
+
+                    <div style="margin:20px 0; padding:16px 20px; background:#f8f0ff; border-left:4px solid #7950f2; border-radius:0 8px 8px 0;">
+                        <p style="margin:0; font-size:17px; font-weight:700; color:#1a1a2e;">${poll.title}</p>
+                        ${poll.description ? `<p style="margin:8px 0 0; font-size:14px; color:#6c757d; line-height:1.5;">${poll.description}</p>` : ''}
+                    </div>
+
+                    <p style="margin:0 0 24px; color:#495057; font-size:15px; line-height:1.6;">
+                        Votre avis compte ! Prenez quelques secondes pour repondre.
+                    </p>
+
+                    <div style="text-align:center; margin:28px 0;">
+                        <a href="${pollUrl}"
+                           style="display:inline-block; background: linear-gradient(135deg, #4c6ef5, #7950f2); color:#ffffff; text-decoration:none; padding:14px 40px; border-radius:50px; font-size:16px; font-weight:700; letter-spacing:0.3px;">
+                            Participer au sondage
+                        </a>
+                    </div>
+
+                    <p style="margin:24px 0 0; color:#adb5bd; font-size:12px; line-height:1.6; text-align:center;">
+                        Si le bouton ne fonctionne pas, copiez ce lien : ${pollUrl}
+                    </p>
+                </td></tr>
+
+                <!-- Footer -->
+                <tr><td style="background:#f8f9fa; border-radius:0 0 16px 16px; padding:20px 28px; text-align:center; border-top: 1px solid #e9ecef;">
+                    <p style="margin:0; color:#adb5bd; font-size:11px;">
+                        Taieb's Kitchen · Vous recevez cet email car vous etes inscrit au service de commande de repas.
+                    </p>
+                </td></tr>
+
+            </table>
+        </td></tr>
+    </table>
+</body>
+</html>`;
+
+    const text = [
+        `Sondage disponible - Taieb's Kitchen`,
+        '',
+        `Un nouveau sondage est ouvert : ${poll.title}`,
+        poll.description ? poll.description : '',
+        '',
+        `Participez ici : ${pollUrl}`,
+        '',
+        `Taieb's Kitchen`,
+    ].filter(l => l !== undefined).join('\n');
+
+    const validRecipients = recipients.filter(r => r.email);
+
+    try {
+        const BATCH_SIZE = 50;
+        let totalSent = 0;
+        for (let i = 0; i < validRecipients.length; i += BATCH_SIZE) {
+            const chunk = validRecipients.slice(i, i + BATCH_SIZE);
+            const { error } = await resend.batch.send(
+                chunk.map(r => ({
+                    from: FROM_EMAIL,
+                    to: r.email,
+                    replyTo: FROM_EMAIL,
+                    subject: `Sondage : ${poll.title} - Taieb's Kitchen`,
+                    html,
+                    text,
+                    headers: {
+                        'List-Unsubscribe': `<mailto:${FROM_EMAIL.match(/<(.+)>/)?.[1] ?? FROM_EMAIL}?subject=unsubscribe>`,
+                    },
+                }))
+            );
+            if (error) {
+                console.error('[Resend] Erreur notification sondage:', JSON.stringify(error));
+                return { success: false, error: error.message };
+            }
+            totalSent += chunk.length;
+        }
+        return { success: true, sent: totalSent };
+    } catch (error: any) {
+        console.error('[Resend] Unexpected error (poll):', error);
+        return { success: false, error: error?.message || 'Erreur inattendue.' };
+    }
+}
+
 // ─── Weekly email template ────────────────────────────────────────────────────
 
 type DayMenu = {

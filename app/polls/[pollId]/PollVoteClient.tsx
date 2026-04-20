@@ -205,7 +205,6 @@ export default function PollVoteClient({ poll, existingVote }: { poll: Poll; exi
             {/* Header */}
             <Stack gap="xs" mb="xl">
                 <Group gap="sm">
-                    <IconClipboardList size={24} color="var(--mantine-color-blue-6)" />
                     <Title order={2}>{poll.title}</Title>
                 </Group>
                 {poll.description && <Text c="dimmed">{poll.description}</Text>}
@@ -238,9 +237,6 @@ export default function PollVoteClient({ poll, existingVote }: { poll: Poll; exi
                             {qi > 0 && <Divider mb="xl" />}
                             <Stack gap="md">
                                 <Group gap="sm">
-                                    <Badge variant="light" size="sm">
-                                        {q.type === 'RANKED_CHOICE' ? 'Classement' : q.type === 'SINGLE_CHOICE' ? 'Choix unique' : 'Choix multiple'}
-                                    </Badge>
                                     <Text fw={600}>{q.text}</Text>
                                 </Group>
 
